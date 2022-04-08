@@ -1,0 +1,5 @@
+include versioneer.py
+include iquaflow/_version.py
+include iquaflow/quality_metrics/cfgs_example/*.cfg
+include iquaflow/datasets/dataset_labels/RER/*.json
+include iquaflow/datasets/dataset_labels/SNR/*.json

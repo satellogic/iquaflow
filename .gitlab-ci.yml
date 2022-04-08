@@ -1,0 +1,46 @@
+stages:
+  - quality
+  - test
+#  - deploy
+
+quality:
+  stage: quality
+  image: python:3.6-slim-buster
+  before_script:
+    - apt-get update
+    - apt-get -qq -y install curl gcc g++
+    - pip install tox
+    - pip install .
+  script:
+    - tox -e check
+  tags:
+    - cindor-public
+
+test:
+  stage: test
+  image:
+    name: python:3.6-slim-buster
+    entrypoint: ["/bin/bash"]
+  before_script:
+    - apt-get update
+    - apt-get install ffmpeg libsm6 libxext6 gcc g++ -y
+    - pip install tox
+    - pip install .
+  script:
+    - tox -r -e py36
+  tags:
+    - cindor-public
+
+# pypi release:
+#   stage: deploy
+#   image: python:3.7-buster
+#   before_script:
+#     - pip install twine pep517
+#   script:
+#     - python3 -m pep517.build .
+#     - twine upload dist/* --user $PYPI_USER --password $PYPI_PWD --repository-url http://pypi.satellogic.team
+#   only:
+#     - tags
+#     - /^v[0-9]+\.[0-9]+\.[0-9]+$/
+#   tags:
+#     - docker-amd64-v2
