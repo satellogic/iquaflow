@@ -1,10 +1,10 @@
-iq\_tool\_box.experiments package
+iquaflow.experiments package
 =================================
 
 Submodules
 ----------
 
-iq\_tool\_box.experiments.experiment\_setup module
+iquaflow.experiments.experiment\_setup module
 --------------------------------------------------
 
 .. automodule:: iquaflow.experiments.experiment_setup
@@ -12,7 +12,7 @@ iq\_tool\_box.experiments.experiment\_setup module
    :undoc-members:
    :show-inheritance:
 
-iq\_tool\_box.experiments.task\_execution module
+iquaflow.experiments.task\_execution module
 ------------------------------------------------
 
 .. automodule:: iquaflow.experiments.task_execution
@@ -20,7 +20,7 @@ iq\_tool\_box.experiments.task\_execution module
    :undoc-members:
    :show-inheritance:
 
-iq\_tool\_box.experiments.utils module
+iquaflow.experiments.utils module
 --------------------------------------
 
 .. automodule:: iquaflow.experiments.utils

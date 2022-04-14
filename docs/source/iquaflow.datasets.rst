@@ -1,10 +1,10 @@
-iq\_tool\_box.datasets package
+iquaflow.datasets package
 ==============================
 
 Submodules
 ----------
 
-iq\_tool\_box.datasets.ds\_exceptions module
+iquaflow.datasets.ds\_exceptions module
 --------------------------------------------
 
 .. automodule:: iquaflow.datasets.ds_exceptions
@@ -12,7 +12,7 @@ iq\_tool\_box.datasets.ds\_exceptions module
    :undoc-members:
    :show-inheritance:
 
-iq\_tool\_box.datasets.ds\_tools module
+iquaflow.datasets.ds\_tools module
 ---------------------------------------
 
 .. automodule:: iquaflow.datasets.ds_tools
@@ -20,7 +20,7 @@ iq\_tool\_box.datasets.ds\_tools module
    :undoc-members:
    :show-inheritance:
 
-iq\_tool\_box.datasets.modifier\_jpg module
+iquaflow.datasets.modifier\_jpg module
 -------------------------------------------
 
 .. automodule:: iquaflow.datasets.modifier_jpg
@@ -28,7 +28,7 @@ iq\_tool\_box.datasets.modifier\_jpg module
    :undoc-members:
    :show-inheritance:
 
-iq\_tool\_box.datasets.modifier\_quant module
+iquaflow.datasets.modifier\_quant module
 ---------------------------------------------
 
 .. automodule:: iquaflow.datasets.modifier_quant

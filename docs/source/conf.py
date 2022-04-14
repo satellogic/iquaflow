@@ -17,8 +17,8 @@ sys.path.insert(0, os.path.abspath('../../iquaflow'))
 
 # -- Project information -----------------------------------------------------
 
-project = 'IQToolBox'
-copyright = '2020, Satellogic, UAB and Eurecat'
+project = 'iquaflow'
+copyright = '2022, Satellogic, UAB and Eurecat'
 author = 'Satellogic, UAB and Eurecat'
 
 # The full version, including alpha/beta/rc tags

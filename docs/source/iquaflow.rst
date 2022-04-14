@@ -1,4 +1,4 @@
-iq\_tool\_box package
+iquaflow package
 =====================
 
 Subpackages
@@ -13,7 +13,7 @@ Subpackages
 Submodules
 ----------
 
-iq\_tool\_box.ds\_stats module
+iquaflow.ds\_stats module
 ------------------------------
 
 .. automodule:: iquaflow.ds_stats
@@ -21,7 +21,7 @@ iq\_tool\_box.ds\_stats module
    :undoc-members:
    :show-inheritance:
 
-iq\_tool\_box.sanity module
+iquaflow.sanity module
 ---------------------------
 
 .. automodule:: iquaflow.sanity
@@ -29,7 +29,7 @@ iq\_tool\_box.sanity module
    :undoc-members:
    :show-inheritance:
 
-iq\_tool\_box.version module
+iquaflow.version module
 ----------------------------
 
 .. automodule:: iquaflow.version
