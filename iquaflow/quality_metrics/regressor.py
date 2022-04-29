@@ -31,10 +31,14 @@ from iquaflow.quality_metrics.tools import (
     circ3d_pad,
     force_rgb,
     get_accuracy,
+    get_accuracy_k,
+    get_AUC,
     get_fscore,
     get_median_rank,
     get_precision,
+    get_precision_k,
     get_recall,
+    get_recall_k,
     get_recall_rate,
     soft2hard,
 )
@@ -50,6 +54,7 @@ def parse_params_cfg(default_cfg_path: str = "config.cfg") -> Any:
     parser.add_argument("--overwrite_crops", default=False, action="store_true")
     parser.add_argument("--plot_only", default=False, action="store_true")
     parser.add_argument("--data_only", default=False, action="store_true")
+    parser.add_argument("--validate_only", default=False, action="store_true")
     parser.add_argument("--cuda", default=False, action="store_true")
     parser.add_argument("--gpus", type=str, default="0")
     parser.add_argument("--seed", type=str, default=str(np.random.randint(12345)))
@@ -281,6 +286,7 @@ class Regressor:
         self.val_ds = args.valds
         self.val_ds_input = args.valdsinput
         self.epochs = int(args.epochs)
+        self.validate_only = args.validate_only
         self.lr = float(args.lr)
         self.momentum = float(args.momentum)
         self.weight_decay = float(args.weight_decay)
@@ -396,12 +402,32 @@ class Regressor:
         val_fscores = []
         train_medRs = []
         val_medRs = []
+        train_Rk1s = []
+        val_Rk1s = []
+        train_Rk5s = []
+        val_Rk5s = []
+        train_Rk10s = []
+        val_Rk10s = []
+        train_AUCs = []
+        val_AUCs = []
+        train_precs_k1 = []
+        val_precs_k1 = []
+        train_precs_k5 = []
+        val_precs_k5 = []
+        train_precs_k10 = []
+        val_precs_k10 = []
         train_recs_k1 = []
         val_recs_k1 = []
         train_recs_k5 = []
         val_recs_k5 = []
         train_recs_k10 = []
         val_recs_k10 = []
+        train_accs_k1 = []
+        val_accs_k1 = []
+        train_accs_k5 = []
+        val_accs_k5 = []
+        train_accs_k10 = []
+        val_accs_k10 = []
         for epoch in range(self.epochs):  # epoch
             (
                 train_loss,
@@ -410,9 +436,19 @@ class Regressor:
                 train_acc,
                 train_fscore,
                 train_medR,
+                train_Rk1,
+                train_Rk5,
+                train_Rk10,
+                train_AUC,
+                train_prec_k1,
+                train_prec_k5,
+                train_prec_k10,
                 train_rec_k1,
                 train_rec_k5,
                 train_rec_k10,
+                train_acc_k1,
+                train_acc_k5,
+                train_acc_k10,
                 train_topK,
                 train_worstK,
                 train_topK_ranks,
@@ -425,18 +461,27 @@ class Regressor:
                 val_acc,
                 val_fscore,
                 val_medR,
+                val_Rk1,
+                val_Rk5,
+                val_Rk10,
+                val_AUC,
+                val_prec_k1,
+                val_prec_k5,
+                val_prec_k10,
                 val_rec_k1,
                 val_rec_k5,
                 val_rec_k10,
+                val_acc_k1,
+                val_acc_k5,
+                val_acc_k10,
                 val_topK,
                 val_worstK,
                 val_topK_ranks,
                 val_worstK_ranks,
             ) = self.validate(val_loader, epoch)
-            if val_loss is None or train_loss is None:
-                import pdb
-
-                pdb.set_trace()
+            if val_loss is None and train_loss is None:
+                print("Error: Validation and Training losses are None.")
+                raise
             is_best = (val_loss < best_loss) & (
                 (val_prec > best_prec) | (val_rec > best_rec)
             )
@@ -503,12 +548,32 @@ class Regressor:
             val_fscores.append(val_fscore)
             train_medRs.append(train_medR)
             val_medRs.append(val_medR)
+            train_Rk1s.append(train_Rk1)
+            val_Rk1s.append(val_Rk1)
+            train_Rk5s.append(train_Rk5)
+            val_Rk5s.append(val_Rk5)
+            train_Rk10s.append(train_Rk10)
+            val_Rk10s.append(val_Rk10)
+            train_AUCs.append(train_AUC)
+            val_AUCs.append(val_AUC)
+            train_precs_k1.append(train_prec_k1)
+            val_precs_k1.append(val_prec_k1)
+            train_precs_k5.append(train_prec_k5)
+            val_precs_k5.append(val_prec_k5)
+            train_precs_k10.append(train_prec_k10)
+            val_precs_k10.append(val_prec_k10)
             train_recs_k1.append(train_rec_k1)
             val_recs_k1.append(val_rec_k1)
             train_recs_k5.append(train_rec_k5)
             val_recs_k5.append(val_rec_k5)
             train_recs_k10.append(train_rec_k10)
             val_recs_k10.append(val_rec_k10)
+            train_accs_k1.append(train_acc_k1)
+            val_accs_k1.append(val_rec_k1)
+            train_accs_k5.append(train_acc_k5)
+            val_accs_k5.append(val_acc_k5)
+            train_accs_k10.append(train_acc_k10)
+            val_accs_k10.append(val_acc_k10)
             print(
                 "Train Loss: "
                 + str(train_loss)
@@ -523,11 +588,31 @@ class Regressor:
                 + " Train medR: "
                 + str(train_medR)
                 + " Train R@1: "
-                + str(train_rec_k1)
+                + str(train_Rk1)
                 + " Train R@5: "
-                + str(train_rec_k5)
+                + str(train_Rk5)
                 + " Train R@10: "
+                + str(train_Rk10)
+                + " Train AUC: "
+                + str(train_AUC)
+                + " Train Precision@1: "
+                + str(train_prec_k1)
+                + " Train Precision@5: "
+                + str(train_prec_k5)
+                + " Train Precision@10: "
+                + str(train_prec_k10)
+                + " Train Recall@1: "
+                + str(train_rec_k1)
+                + " Train Recall@5: "
+                + str(train_rec_k5)
+                + " Train Recall@10: "
                 + str(train_rec_k10)
+                + " Train Accuracy@1: "
+                + str(train_acc_k1)
+                + " Train Accuracy@5: "
+                + str(train_acc_k5)
+                + " Train Accuracy@10: "
+                + str(train_acc_k10)
             )
             print(
                 "Validation Loss: "
@@ -543,11 +628,31 @@ class Regressor:
                 + " Validation medR: "
                 + str(val_medR)
                 + " Validation R@1: "
-                + str(val_rec_k1)
+                + str(val_Rk1)
                 + " Validation R@5: "
-                + str(val_rec_k5)
+                + str(val_Rk5)
                 + " Validation R@10: "
+                + str(val_Rk10)
+                + " Validation AUC: "
+                + str(val_AUC)
+                + " Validation Precision@1: "
+                + str(val_prec_k1)
+                + " Validation Precision@5: "
+                + str(val_prec_k5)
+                + " Validation Precision@10: "
+                + str(val_prec_k10)
+                + " Validation Recall@1: "
+                + str(val_rec_k1)
+                + " Validation Recall@5: "
+                + str(val_rec_k5)
+                + " Validation Recall@10: "
                 + str(val_rec_k10)
+                + " Validation Accuracy@1: "
+                + str(val_acc_k1)
+                + " Validation Accuracy@5: "
+                + str(val_acc_k5)
+                + " Validation Accuracy@10: "
+                + str(val_acc_k10)
             )
             np.savetxt(
                 os.path.join(self.output_path, "stats.csv"),
@@ -565,12 +670,32 @@ class Regressor:
                         val_fscores,
                         train_medRs,
                         val_medRs,
+                        train_Rk1s,
+                        val_Rk1s,
+                        train_Rk5s,
+                        val_Rk5s,
+                        train_Rk10s,
+                        val_Rk10s,
+                        train_AUCs,
+                        val_AUCs,
+                        train_precs_k1,
+                        val_precs_k1,
+                        train_precs_k5,
+                        val_precs_k5,
+                        train_precs_k10,
+                        val_precs_k10,
                         train_recs_k1,
                         val_recs_k1,
                         train_recs_k5,
                         val_recs_k5,
                         train_recs_k10,
                         val_recs_k10,
+                        train_accs_k1,
+                        val_accs_k1,
+                        train_accs_k5,
+                        val_accs_k5,
+                        train_accs_k10,
+                        val_accs_k10,
                     ]
                 ),
                 delimiter=",",
@@ -720,235 +845,394 @@ class Regressor:
         return self.net(image_tensor)
 
     def train(self, train_loader: Any, epoch: Any) -> Any:
-        self.net.train()  # train mode
         losses = np.array([])
         precs = np.array([])
         recs = np.array([])
         accs = np.array([])
         fscores = np.array([])
         medRs = np.array([])
+        Rk1s = np.array([])
+        Rk5s = np.array([])
+        Rk10s = np.array([])
+        AUCs = np.array([])
+        precs_k1 = np.array([])
+        precs_k5 = np.array([])
+        precs_k10 = np.array([])
         recs_k1 = np.array([])
         recs_k5 = np.array([])
         recs_k10 = np.array([])
-        # xbatches=[x for bix,(x,y) in enumerate(train_loader)]
-        # ybatches=[y for bix,(x,y) in enumerate(train_loader)]
+        accs_k1 = np.array([])
+        accs_k5 = np.array([])
+        accs_k10 = np.array([])
         filenames = []
         ranks = []
-        for bidx, (filename, param, x, y) in enumerate(
-            train_loader
-        ):  # ongoing: if net is outputting several outputs, separate target and prediction for each param and make sure evaluate that specific head
-            # join regression batch for crops and modifiers
-            x.requires_grad = True
-            # transform sigmas to regression intervals (yreg)
-            param = [
-                self.params[0] if par == "" else par for par in param
-            ]  # if param is empty, set to first param in params list
-            yreg = torch.stack(
-                [
-                    torch.tensor(
-                        bisect_right(self.yclasses[param[i]], y[i]) - 1,
-                        dtype=torch.long,
-                    )
-                    for i in range(len(y))
-                ]
-            )
-            yreg = Variable(yreg)
-            if self.cuda:
-                yreg = yreg.cuda()
-                x = x.cuda()
-
-            prediction = self.net(x)  # input x and predict based on x, [b,:,:,:]
-
-            if len(self.params) == 1:
-                target = torch.eye(self.num_regs[0])[yreg]
-                pred = torch.nn.Sigmoid()(prediction)
-                if self.cuda:
-                    target = target.cuda()
-                # calc loss
-                loss = self.criterion(pred, target)  # yreg as alternative (classes)
-
-                # output to soft encoding (threshold output and compute) to get TP,FP...
-                output_soft = soft2hard(prediction, self.soft_threshold)
-                prec = get_precision(output_soft, target)
-                rec = get_recall(output_soft, target)
-                acc = get_accuracy(output_soft, target)
-                fscore = get_fscore(output_soft, target)
-                medR, rank = get_median_rank(prediction, target)
-                rec_k1 = get_recall_rate(prediction, target, 1)
-                rec_k5 = get_recall_rate(prediction, target, 5)
-                rec_k10 = get_recall_rate(prediction, target, 10)
-                if self.debug:  # Debug
-                    print(
-                        "Batch("
-                        + str(bidx)
-                        + "/"
-                        + str(train_loader.__len__())
-                        + ")"
-                        + " Precision="
-                        + str(float(prec))
-                        + " Recall="
-                        + str(float(rec))
-                        + " Accuracy="
-                        + str(float(acc))
-                        + " F-Score="
-                        + str(float(fscore))
-                        + " medR="
-                        + str(float(medR))
-                        + " R@1="
-                        + str(float(rec_k1))
-                        + " R@5="
-                        + str(float(rec_k5))
-                        + " R@10="
-                        + str(float(rec_k10))
-                    )
-                """
-                par = self.params[0]
-                for i, tgt in enumerate(target):
-                    output_json = {par: self.yclasses[par][prediction[i].argmax()]}
-                    target_json = {par: self.yclasses[par][target[i].argmax()]}
-                    # print("target "+str(target_json)+" pred "+str(output_json)+" batch "+str(bidx+1))
-                """
-            else:
-                # compute losses differently for each head
-                loss = 0.0
-                pprec = []
-                preca = []
-                pacc = []
-                pfscore = []
-                pmedR = []
-                preca_k1 = []
-                preca_k5 = []
-                preca_k10 = []
-                param_ids = [self.dict_params[par] for par in param]
-                for pidx, par in enumerate(self.params):
-                    param_indices = [
-                        ppidx for ppidx, pid in enumerate(param_ids) if pid == pidx
+        if self.validate_only is False:
+            self.net.train()  # train mode
+            # xbatches=[x for bix,(x,y) in enumerate(train_loader)]
+            # ybatches=[y for bix,(x,y) in enumerate(train_loader)]
+            for bidx, (filename, param, x, y) in enumerate(
+                train_loader
+            ):  # ongoing: if net is outputting several outputs, separate target and prediction for each param and make sure evaluate that specific head
+                # join regression batch for crops and modifiers
+                x.requires_grad = True
+                # transform sigmas to regression intervals (yreg)
+                param = [
+                    self.params[0] if par == "" else par for par in param
+                ]  # if param is empty, set to first param in params list
+                yreg = torch.stack(
+                    [
+                        torch.tensor(
+                            bisect_right(self.yclasses[param[i]], y[i]) - 1,
+                            dtype=torch.long,
+                        )
+                        for i in range(len(y))
                     ]
-                    if len(param_indices) == 0:
-                        continue
-                    param_yreg = yreg[param_indices]
-                    param_target = torch.eye(self.num_regs[pidx])[
-                        param_yreg
-                    ]  # one-hot encoding
-                    if self.cuda:
-                        param_target = param_target.cuda()
-                    param_prediction = prediction[pidx][param_indices]
-                    param_pred = torch.nn.Sigmoid()(param_prediction)
-                    param_loss = self.criterion(
-                        param_pred, param_target
-                    )  # one loss for each param
+                )
+                yreg = Variable(yreg)
+                if self.cuda:
+                    yreg = yreg.cuda()
+                    x = x.cuda()
 
-                    loss += param_loss  # final loss is sum of all param BCE losses
-                    # todo: check if this loss computation works, or losses need to be adapted to each param/head?
-                    # output to soft encoding (threshold output and compute) to get TP,FP...
-                    output_soft = soft2hard(param_prediction, self.soft_threshold)
-                    param_prec = get_precision(output_soft, param_target)
-                    param_rec = get_recall(output_soft, param_target)
-                    param_acc = get_accuracy(output_soft, param_target)
-                    param_fscore = get_fscore(output_soft, param_target)
-                    param_medR, rank = get_median_rank(param_prediction, param_target)
-                    param_rec_k1 = get_recall_rate(param_prediction, param_target, 1)
-                    param_rec_k5 = get_recall_rate(param_prediction, param_target, 5)
-                    param_rec_k10 = get_recall_rate(param_prediction, param_target, 10)
-                    pprec.append(param_prec)
-                    preca.append(param_rec)
-                    pacc.append(param_acc)
-                    pfscore.append(param_fscore)
-                    pmedR.append(param_medR)
-                    preca_k1.append(param_rec_k1)
-                    preca_k5.append(param_rec_k5)
-                    preca_k10.append(param_rec_k10)
+                prediction = self.net(x)  # input x and predict based on x, [b,:,:,:]
+
+                if len(self.params) == 1:
+                    target = torch.eye(self.num_regs[0])[yreg]
+                    pred = torch.nn.Sigmoid()(prediction)
+                    if self.cuda:
+                        target = target.cuda()
+                    # calc loss
+                    loss = self.criterion(pred, target)  # yreg as alternative (classes)
+
+                    # output encoding (threshold output and compute) to get TP,FP...
+                    output_hard = soft2hard(prediction, self.soft_threshold)
+                    prec = get_precision(output_hard, target)
+                    rec = get_recall(output_hard, target)
+                    acc = get_accuracy(output_hard, target)
+                    fscore = get_fscore(output_hard, target)
+                    medR, rank = get_median_rank(prediction, target)
+                    Rk1 = get_recall_rate(prediction, target, 1)
+                    Rk5 = get_recall_rate(prediction, target, 5)
+                    Rk10 = get_recall_rate(prediction, target, 10)
+                    AUC = get_AUC(output_hard, target)
+                    prec_k1 = get_precision_k(
+                        output_hard, target, 1, self.soft_threshold
+                    )
+                    prec_k5 = get_precision_k(
+                        output_hard, target, 5, self.soft_threshold
+                    )
+                    prec_k10 = get_precision_k(
+                        output_hard, target, 10, self.soft_threshold
+                    )
+                    rec_k1 = get_recall_k(output_hard, target, 1, self.soft_threshold)
+                    rec_k5 = get_recall_k(output_hard, target, 5, self.soft_threshold)
+                    rec_k10 = get_recall_k(output_hard, target, 10, self.soft_threshold)
+                    acc_k1 = get_accuracy_k(output_hard, target, 1, self.soft_threshold)
+                    acc_k5 = get_accuracy_k(output_hard, target, 5, self.soft_threshold)
+                    acc_k10 = get_accuracy_k(
+                        output_hard, target, 10, self.soft_threshold
+                    )
+                    if self.debug:  # Debug
+                        print(
+                            "Batch("
+                            + str(bidx)
+                            + "/"
+                            + str(train_loader.__len__())
+                            + ")"
+                            + " Precision="
+                            + str(float(prec))
+                            + " Recall="
+                            + str(float(rec))
+                            + " Accuracy="
+                            + str(float(acc))
+                            + " F-Score="
+                            + str(float(fscore))
+                            + " medR="
+                            + str(float(medR))
+                            + " R@1="
+                            + str(float(Rk1))
+                            + " R@5="
+                            + str(float(Rk5))
+                            + " R@10="
+                            + str(float(Rk10))
+                            + " AUC="
+                            + str(float(AUC))
+                            + " Precision@1="
+                            + str(float(prec_k1))
+                            + " Precision@5="
+                            + str(float(prec_k5))
+                            + " Precision@10="
+                            + str(float(prec_k10))
+                            + " Recall@1="
+                            + str(float(rec_k1))
+                            + " Recall@5="
+                            + str(float(rec_k5))
+                            + " Recall@10="
+                            + str(float(rec_k10))
+                            + " Accuracy@1="
+                            + str(float(acc_k1))
+                            + " Accuracy@5="
+                            + str(float(acc_k5))
+                            + " Accuracy@10="
+                            + str(float(acc_k10))
+                        )
                     """
-                    # print json values (converted from onehot to param interval values)
-                    for i, tgt in enumerate(param_target):
-                        output_json = {par: self.yclasses[par][param_pred[i].argmax()]}
-                        target_json = {
-                            par: self.yclasses[par][param_target[i].argmax()]
-                        }
+                    par = self.params[0]
+                    for i, tgt in enumerate(target):
+                        output_json = {par: self.yclasses[par][prediction[i].argmax()]}
+                        target_json = {par: self.yclasses[par][target[i].argmax()]}
                         # print("target "+str(target_json)+" pred "+str(output_json)+" batch "+str(bidx+1))
                     """
-                prec = np.nanmean(pprec)  # use mean or return separate precs?
-                rec = np.nanmean(preca)
-                acc = np.nanmean(pacc)
-                fscore = np.nanmean(pfscore)
-                medR = np.nanmean(pmedR)
-                rec_k1 = np.nanmean(preca_k1)
-                rec_k5 = np.nanmean(preca_k5)
-                rec_k10 = np.nanmean(preca_k10)
-                # Debug
-                if self.debug:
-                    print(
-                        "Batch("
-                        + str(bidx)
-                        + "/"
-                        + str(train_loader.__len__())
-                        + ")"
-                        + " Precision="
-                        + str(float(prec))
-                        + " Recall="
-                        + str(float(rec))
-                        + " Accuracy="
-                        + str(float(acc))
-                        + " F-Score="
-                        + str(float(fscore))
-                        + " medR="
-                        + str(float(medR))
-                        + " R@1="
-                        + str(float(rec_k1))
-                        + " R@5="
-                        + str(float(rec_k5))
-                        + " R@10="
-                        + str(float(rec_k10))
-                    )
-            precs = np.append(precs, prec)
-            recs = np.append(recs, rec)
-            accs = np.append(accs, acc)
-            fscores = np.append(fscores, fscore)
-            medRs = np.append(medRs, medR)
-            recs_k1 = np.append(recs_k1, rec_k1)
-            recs_k5 = np.append(recs_k5, rec_k5)
-            recs_k10 = np.append(recs_k10, rec_k10)
-            if self.cuda:
-                losses = np.append(losses, loss.data.cpu().numpy())
-            else:
-                losses = np.append(losses, loss.data.numpy())
+                else:
+                    # compute losses differently for each head
+                    loss = 0.0
+                    pprec = []
+                    preca = []
+                    pacc = []
+                    pfscore = []
+                    pmedR = []
+                    pRk1 = []
+                    pRk5 = []
+                    pRk10 = []
+                    pAUC = []
+                    pprec_k1 = []
+                    pprec_k5 = []
+                    pprec_k10 = []
+                    preca_k1 = []
+                    preca_k5 = []
+                    preca_k10 = []
+                    pacc_k1 = []
+                    pacc_k5 = []
+                    pacc_k10 = []
+                    param_ids = [self.dict_params[par] for par in param]
+                    for pidx, par in enumerate(self.params):
+                        param_indices = [
+                            ppidx for ppidx, pid in enumerate(param_ids) if pid == pidx
+                        ]
+                        if len(param_indices) == 0:
+                            continue
+                        param_yreg = yreg[param_indices]
+                        param_target = torch.eye(self.num_regs[pidx])[
+                            param_yreg
+                        ]  # one-hot encoding
+                        if self.cuda:
+                            param_target = param_target.cuda()
+                        param_prediction = prediction[pidx][param_indices]
+                        param_pred = torch.nn.Sigmoid()(param_prediction)
+                        param_loss = self.criterion(
+                            param_pred, param_target
+                        )  # one loss for each param
 
-            # backprop
-            self.optimizer.zero_grad()  # clear gradients for next train
-            loss.backward()  # backpropagation, compute gradients
-            self.optimizer.step()  # apply gradients
+                        loss += param_loss  # final loss is sum of all param BCE losses
+                        # todo: check if this loss computation works, or losses need to be adapted to each param/head?
+                        # output encoding (threshold output and compute) to get TP,FP...
+                        output_hard = soft2hard(param_prediction, self.soft_threshold)
+                        param_prec = get_precision(output_hard, param_target)
+                        param_rec = get_recall(output_hard, param_target)
+                        param_acc = get_accuracy(output_hard, param_target)
+                        param_fscore = get_fscore(output_hard, param_target)
+                        param_medR, rank = get_median_rank(
+                            param_prediction, param_target
+                        )
+                        param_Rk1 = get_recall_rate(param_prediction, param_target, 1)
+                        param_Rk5 = get_recall_rate(param_prediction, param_target, 5)
+                        param_Rk10 = get_recall_rate(param_prediction, param_target, 10)
+                        param_AUC = get_AUC(output_hard, param_target)
+                        param_prec_k1 = get_precision_k(
+                            output_hard, param_target, 1, self.soft_threshold
+                        )
+                        param_prec_k5 = get_precision_k(
+                            output_hard, param_target, 5, self.soft_threshold
+                        )
+                        param_prec_k10 = get_precision_k(
+                            output_hard, param_target, 10, self.soft_threshold
+                        )
+                        param_reca_k1 = get_recall_k(
+                            output_hard, param_target, 1, self.soft_threshold
+                        )
+                        param_reca_k5 = get_recall_k(
+                            output_hard, param_target, 5, self.soft_threshold
+                        )
+                        param_reca_k10 = get_recall_k(
+                            output_hard, param_target, 10, self.soft_threshold
+                        )
+                        param_acc_k1 = get_accuracy_k(
+                            output_hard, param_target, 1, self.soft_threshold
+                        )
+                        param_acc_k5 = get_accuracy_k(
+                            output_hard, param_target, 5, self.soft_threshold
+                        )
+                        param_acc_k10 = get_accuracy_k(
+                            output_hard, param_target, 10, self.soft_threshold
+                        )
+                        pprec.append(param_prec)
+                        preca.append(param_rec)
+                        pacc.append(param_acc)
+                        pfscore.append(param_fscore)
+                        pmedR.append(param_medR)
+                        pRk1.append(param_Rk1)
+                        pRk5.append(param_Rk5)
+                        pRk10.append(param_Rk10)
+                        pAUC.append(param_AUC)
+                        pprec_k1.append(param_prec_k1)
+                        pprec_k5.append(param_prec_k5)
+                        pprec_k10.append(param_prec_k10)
+                        preca_k1.append(param_reca_k1)
+                        preca_k5.append(param_reca_k5)
+                        preca_k10.append(param_reca_k10)
+                        pacc_k1.append(param_acc_k1)
+                        pacc_k5.append(param_acc_k5)
+                        pacc_k10.append(param_acc_k10)
+                        """
+                        # print json values (converted from onehot to param interval values)
+                        for i, tgt in enumerate(param_target):
+                            output_json = {par: self.yclasses[par][param_pred[i].argmax()]}
+                            target_json = {
+                                par: self.yclasses[par][param_target[i].argmax()]
+                            }
+                            # print("target "+str(target_json)+" pred "+str(output_json)+" batch "+str(bidx+1))
+                        """
+                    prec = np.nanmean(pprec)  # use mean or return separate precs?
+                    rec = np.nanmean(preca)
+                    acc = np.nanmean(pacc)
+                    fscore = np.nanmean(pfscore)
+                    medR = np.nanmean(pmedR)
+                    Rk1 = np.nanmean(pRk1)
+                    Rk5 = np.nanmean(pRk5)
+                    Rk10 = np.nanmean(pRk10)
+                    AUC = np.nanmean(pAUC)
+                    prec_k1 = np.nanmean(pprec_k1)
+                    prec_k5 = np.nanmean(pprec_k5)
+                    prec_k10 = np.nanmean(pprec_k10)
+                    rec_k1 = np.nanmean(preca_k1)
+                    rec_k5 = np.nanmean(preca_k5)
+                    rec_k10 = np.nanmean(preca_k10)
+                    pacc_k1 = np.nanmean(pacc_k1)
+                    pacc_k5 = np.nanmean(pacc_k5)
+                    pacc_k10 = np.nanmean(pacc_k10)
+                    # Debug
+                    if self.debug:
+                        print(
+                            "Batch("
+                            + str(bidx)
+                            + "/"
+                            + str(train_loader.__len__())
+                            + ")"
+                            + " Precision="
+                            + str(float(prec))
+                            + " Recall="
+                            + str(float(rec))
+                            + " Accuracy="
+                            + str(float(acc))
+                            + " F-Score="
+                            + str(float(fscore))
+                            + " medR="
+                            + str(float(medR))
+                            + " R@1="
+                            + str(float(Rk1))
+                            + " R@5="
+                            + str(float(Rk5))
+                            + " R@10="
+                            + str(float(Rk10))
+                            + " AUC="
+                            + str(float(AUC))
+                            + " Precision@1="
+                            + str(float(prec_k1))
+                            + " Precision@5="
+                            + str(float(prec_k5))
+                            + " Precision@10="
+                            + str(float(prec_k10))
+                            + " Recall@1="
+                            + str(float(rec_k1))
+                            + " Recall@5="
+                            + str(float(rec_k5))
+                            + " Recall@10="
+                            + str(float(rec_k10))
+                            + " Accuracy@1="
+                            + str(float(acc_k1))
+                            + " Accuracy@5="
+                            + str(float(acc_k5))
+                            + " Accuracy@10="
+                            + str(float(acc_k10))
+                        )
+                precs = np.append(precs, prec)
+                recs = np.append(recs, rec)
+                accs = np.append(accs, acc)
+                fscores = np.append(fscores, fscore)
+                medRs = np.append(medRs, medR)
+                Rk1s = np.append(Rk1s, Rk1)
+                Rk5s = np.append(Rk5s, Rk5)
+                Rk10s = np.append(Rk10s, Rk10)
+                AUCs = np.append(AUCs, AUC)
+                precs_k1 = np.append(precs_k1, prec_k1)
+                precs_k5 = np.append(precs_k5, prec_k5)
+                precs_k10 = np.append(precs_k10, prec_k10)
+                recs_k1 = np.append(recs_k1, rec_k1)
+                recs_k5 = np.append(recs_k5, rec_k5)
+                recs_k10 = np.append(recs_k10, rec_k10)
+                accs_k1 = np.append(accs_k1, acc_k1)
+                accs_k5 = np.append(accs_k5, acc_k5)
+                accs_k10 = np.append(accs_k10, acc_k10)
+                if self.cuda:
+                    losses = np.append(losses, loss.data.cpu().numpy())
+                else:
+                    losses = np.append(losses, loss.data.numpy())
 
-            # print("Debug (check sigma intervals (one-hot encoding) of target and prediction)")
-            # print("Target=")
-            # print(target.squeeze())
-            # print("Prediction=")
-            # print(pred.squeeze())
+                # backprop
+                self.optimizer.zero_grad()  # clear gradients for next train
+                loss.backward()  # backpropagation, compute gradients
+                self.optimizer.step()  # apply gradients
 
-            filenames.append(filename)
-            ranks.append(rank)
+                # print("Debug (check sigma intervals (one-hot encoding) of target and prediction)")
+                # print("Target=")
+                # print(target.squeeze())
+                # print("Prediction=")
+                # print(pred.squeeze())
 
-        epoch_loss = np.nanmean(losses)
-        epoch_prec = np.nanmean(precs)
-        epoch_rec = np.nanmean(recs)
-        epoch_acc = np.nanmean(accs)
-        epoch_fscore = np.nanmean(fscores)
-        epoch_medR = np.nanmean(medRs)
-        epoch_rec_k1 = np.nanmean(recs_k1)
-        epoch_rec_k5 = np.nanmean(recs_k5)
-        epoch_rec_k10 = np.nanmean(recs_k10)
-        print(
-            "Train Step = %d" % epoch
-            + " Loss = %.4f" % epoch_loss
-            + " Precision = %0.4f" % epoch_prec
-            + " Accuracy = %.4f" % epoch_acc
-            + " Recall = %.4f" % epoch_rec
-            + " Fscore = %.4f" % epoch_fscore
-            + " medR = %.4f" % epoch_medR
-            + " R@1 = %.4f" % epoch_rec_k1
-            + " R@5 = %.4f" % epoch_rec_k5
-            + " R@10 = %.4f" % epoch_rec_k10
-        )
+                filenames.append(filename)
+                ranks.append(rank)
 
+        epoch_loss = np.nanmean(losses) if len(losses) > 0 else np.nan
+        epoch_prec = np.nanmean(precs) if len(precs) > 0 else np.nan
+        epoch_rec = np.nanmean(recs) if len(recs) > 0 else np.nan
+        epoch_acc = np.nanmean(accs) if len(accs) > 0 else np.nan
+        epoch_fscore = np.nanmean(fscores) if len(fscores) > 0 else np.nan
+        epoch_medR = np.nanmean(medRs) if len(medRs) > 0 else np.nan
+        epoch_Rk1 = np.nanmean(Rk1s) if len(Rk1s) > 0 else np.nan
+        epoch_Rk5 = np.nanmean(Rk5s) if len(Rk5s) > 0 else np.nan
+        epoch_Rk10 = np.nanmean(Rk10s) if len(Rk10s) > 0 else np.nan
+        epoch_AUC = np.nanmean(AUCs) if len(AUCs) > 0 else np.nan
+        epoch_prec_k1 = np.nanmean(precs_k1) if len(precs_k1) > 0 else np.nan
+        epoch_prec_k5 = np.nanmean(precs_k5) if len(precs_k5) > 0 else np.nan
+        epoch_prec_k10 = np.nanmean(precs_k10) if len(precs_k10) > 0 else np.nan
+        epoch_rec_k1 = np.nanmean(recs_k1) if len(recs_k1) > 0 else np.nan
+        epoch_rec_k5 = np.nanmean(recs_k5) if len(recs_k5) > 0 else np.nan
+        epoch_rec_k10 = np.nanmean(recs_k10) if len(recs_k10) > 0 else np.nan
+        epoch_acc_k1 = np.nanmean(accs_k1) if len(accs_k1) > 0 else np.nan
+        epoch_acc_k5 = np.nanmean(accs_k5) if len(accs_k5) > 0 else np.nan
+        epoch_acc_k10 = np.nanmean(accs_k10) if len(accs_k10) > 0 else np.nan
+        if self.validate_only is False:
+            print(
+                "Train Step = %d" % epoch
+                + " Loss = %.4f" % epoch_loss
+                + " Precision = %0.4f" % epoch_prec
+                + " Accuracy = %.4f" % epoch_acc
+                + " Recall = %.4f" % epoch_rec
+                + " Fscore = %.4f" % epoch_fscore
+                + " medR = %.4f" % epoch_medR
+                + " R@1 = %.4f" % epoch_Rk1
+                + " R@5 = %.4f" % epoch_Rk5
+                + " R@10 = %.4f" % epoch_Rk10
+                + " AUC = %.4f" % epoch_AUC
+                + " Precision@1 = %.4f" % epoch_prec_k1
+                + " Precision@5 = %.4f" % epoch_prec_k5
+                + " Precision@10 = %.4f" % epoch_prec_k10
+                + " Recall@1 = %.4f" % epoch_rec_k1
+                + " Recall@5 = %.4f" % epoch_rec_k5
+                + " Recall@10 = %.4f" % epoch_rec_k10
+                + " Accuracy@1 = %.4f" % epoch_acc_k1
+                + " Accuracy@5 = %.4f" % epoch_acc_k5
+                + " Accuracy@10 = %.4f" % epoch_acc_k10
+            )
         # Get top and worst K crop filenames
         filenames_stacked = np.array([col for row in filenames for col in row])
         ranks_stacked = np.array([col for row in ranks for col in row])
@@ -958,6 +1242,7 @@ class Regressor:
         worstK = filenames_stacked[order_ranks][::-1][:Ktop]
         topK_ranks = ranks_stacked[order_ranks][:Ktop]
         worstK_ranks = ranks_stacked[order_ranks][::-1][:Ktop]
+
         return (
             epoch_loss,
             epoch_prec,
@@ -965,9 +1250,19 @@ class Regressor:
             epoch_acc,
             epoch_fscore,
             epoch_medR,
+            epoch_Rk1,
+            epoch_Rk5,
+            epoch_Rk10,
+            epoch_AUC,
+            epoch_prec_k1,
+            epoch_prec_k5,
+            epoch_prec_k10,
             epoch_rec_k1,
             epoch_rec_k5,
             epoch_rec_k10,
+            epoch_acc_k1,
+            epoch_acc_k5,
+            epoch_acc_k10,
             topK,
             worstK,
             topK_ranks,
@@ -984,9 +1279,19 @@ class Regressor:
             accs = np.array([])
             fscores = np.array([])
             medRs = np.array([])
+            Rk1s = np.array([])
+            Rk5s = np.array([])
+            Rk10s = np.array([])
+            AUCs = np.array([])
+            precs_k1 = np.array([])
+            precs_k5 = np.array([])
+            precs_k10 = np.array([])
             recs_k1 = np.array([])
             recs_k5 = np.array([])
             recs_k10 = np.array([])
+            accs_k1 = np.array([])
+            accs_k5 = np.array([])
+            accs_k10 = np.array([])
             # xbatches=[x for bix,(x,y) in enumerate(val_loader)]
             # ybatches=[y for bix,(x,y) in enumerate(val_loader)]
             filenames = []
@@ -1019,15 +1324,33 @@ class Regressor:
                         target = target.cuda()
                     loss = self.criterion(pred, target)  # yreg as alternative (classes)
                     # output to soft encoding (threshold output and compute) to get TP,FP...
-                    output_soft = soft2hard(prediction, self.soft_threshold)
-                    prec = get_precision(output_soft, target)
-                    rec = get_recall(output_soft, target)
-                    acc = get_accuracy(output_soft, target)
-                    fscore = get_fscore(output_soft, target)
+                    output_hard = soft2hard(prediction, self.soft_threshold)
+                    prec = get_precision(output_hard, target)
+                    rec = get_recall(output_hard, target)
+                    acc = get_accuracy(output_hard, target)
+                    fscore = get_fscore(output_hard, target)
                     medR, rank = get_median_rank(prediction, target)
-                    rec_k1 = get_recall_rate(prediction, target, 1)
-                    rec_k5 = get_recall_rate(prediction, target, 5)
-                    rec_k10 = get_recall_rate(prediction, target, 10)
+                    Rk1 = get_recall_rate(prediction, target, 1)
+                    Rk5 = get_recall_rate(prediction, target, 5)
+                    Rk10 = get_recall_rate(prediction, target, 10)
+                    AUC = get_AUC(output_hard, target)
+                    prec_k1 = get_precision_k(
+                        output_hard, target, 1, self.soft_threshold
+                    )
+                    prec_k5 = get_precision_k(
+                        output_hard, target, 5, self.soft_threshold
+                    )
+                    prec_k10 = get_precision_k(
+                        output_hard, target, 10, self.soft_threshold
+                    )
+                    rec_k1 = get_recall_k(output_hard, target, 1, self.soft_threshold)
+                    rec_k5 = get_recall_k(output_hard, target, 5, self.soft_threshold)
+                    rec_k10 = get_recall_k(output_hard, target, 10, self.soft_threshold)
+                    acc_k1 = get_accuracy_k(output_hard, target, 1, self.soft_threshold)
+                    acc_k5 = get_accuracy_k(output_hard, target, 5, self.soft_threshold)
+                    acc_k10 = get_accuracy_k(
+                        output_hard, target, 10, self.soft_threshold
+                    )
                     # Debug
                     if self.debug:
                         print(
@@ -1047,11 +1370,32 @@ class Regressor:
                             + " medR="
                             + str(float(medR))
                             + " R@1="
-                            + str(float(rec_k1))
+                            + str(float(Rk1))
                             + " R@5="
-                            + str(float(rec_k5))
+                            + str(float(Rk5))
                             + " R@10="
+                            + str(float(Rk10))
+                            + str(float(Rk10))
+                            + " AUC="
+                            + str(float(AUC))
+                            + " Precision@1="
+                            + str(float(prec_k1))
+                            + " Precision@5="
+                            + str(float(prec_k5))
+                            + " Precision@10="
+                            + str(float(prec_k10))
+                            + " Recall@1="
+                            + str(float(rec_k1))
+                            + " Recall@5="
+                            + str(float(rec_k5))
+                            + " Recall@10="
                             + str(float(rec_k10))
+                            + " Accuracy@1="
+                            + str(float(acc_k1))
+                            + " Accuracy@5="
+                            + str(float(acc_k5))
+                            + " Accuracy@10="
+                            + str(float(acc_k10))
                         )
                     """
                     par = self.params[0]
@@ -1068,9 +1412,19 @@ class Regressor:
                     pacc = []
                     pfscore = []
                     pmedR = []
+                    pRk1 = []
+                    pRk5 = []
+                    pRk10 = []
+                    pAUC = []
+                    pprec_k1 = []
+                    pprec_k5 = []
+                    pprec_k10 = []
                     preca_k1 = []
                     preca_k5 = []
                     preca_k10 = []
+                    pacc_k1 = []
+                    pacc_k5 = []
+                    pacc_k10 = []
                     param_ids = [self.dict_params[par] for par in param]
                     for pidx, par in enumerate(self.params):
                         param_indices = [
@@ -1093,31 +1447,63 @@ class Regressor:
                         loss += param_loss  # final loss is sum of all param BCE losses
 
                         # output to soft encoding (threshold output and compute) to get TP,FP...
-                        output_soft = soft2hard(param_prediction, self.soft_threshold)
-                        param_prec = get_precision(output_soft, param_target)
-                        param_preca = get_recall(output_soft, param_target)
-                        param_pacc = get_accuracy(output_soft, param_target)
-                        param_pfscore = get_fscore(output_soft, param_target)
+                        output_hard = soft2hard(param_prediction, self.soft_threshold)
+                        param_prec = get_precision(output_hard, param_target)
+                        param_rec = get_recall(output_hard, param_target)
+                        param_acc = get_accuracy(output_hard, param_target)
+                        param_fscore = get_fscore(output_hard, param_target)
                         param_medR, rank = get_median_rank(
                             param_prediction, param_target
                         )
-                        param_rec_k1 = get_recall_rate(
-                            param_prediction, param_target, 1
+                        param_Rk1 = get_recall_rate(param_prediction, param_target, 1)
+                        param_Rk5 = get_recall_rate(param_prediction, param_target, 5)
+                        param_Rk10 = get_recall_rate(param_prediction, param_target, 10)
+                        param_AUC = get_AUC(output_hard, param_target)
+                        param_prec_k1 = get_precision_k(
+                            output_hard, param_target, 1, self.soft_threshold
                         )
-                        param_rec_k5 = get_recall_rate(
-                            param_prediction, param_target, 5
+                        param_prec_k5 = get_precision_k(
+                            output_hard, param_target, 5, self.soft_threshold
                         )
-                        param_rec_k10 = get_recall_rate(
-                            param_prediction, param_target, 10
+                        param_prec_k10 = get_precision_k(
+                            output_hard, param_target, 10, self.soft_threshold
+                        )
+                        param_reca_k1 = get_recall_k(
+                            output_hard, param_target, 1, self.soft_threshold
+                        )
+                        param_reca_k5 = get_recall_k(
+                            output_hard, param_target, 5, self.soft_threshold
+                        )
+                        param_reca_k10 = get_recall_k(
+                            output_hard, param_target, 10, self.soft_threshold
+                        )
+                        param_acc_k1 = get_accuracy_k(
+                            output_hard, param_target, 1, self.soft_threshold
+                        )
+                        param_acc_k5 = get_accuracy_k(
+                            output_hard, param_target, 5, self.soft_threshold
+                        )
+                        param_acc_k10 = get_accuracy_k(
+                            output_hard, param_target, 10, self.soft_threshold
                         )
                         pprec.append(param_prec)
-                        preca.append(param_preca)
-                        pacc.append(param_pacc)
-                        pfscore.append(param_pfscore)
+                        preca.append(param_rec)
+                        pacc.append(param_acc)
+                        pfscore.append(param_fscore)
                         pmedR.append(param_medR)
-                        preca_k1.append(param_rec_k1)
-                        preca_k5.append(param_rec_k5)
-                        preca_k10.append(param_rec_k10)
+                        pRk1.append(param_Rk1)
+                        pRk5.append(param_Rk5)
+                        pRk10.append(param_Rk10)
+                        pAUC.append(param_AUC)
+                        pprec_k1.append(param_prec_k1)
+                        pprec_k5.append(param_prec_k5)
+                        pprec_k10.append(param_prec_k10)
+                        preca_k1.append(param_reca_k1)
+                        preca_k5.append(param_reca_k5)
+                        preca_k10.append(param_reca_k10)
+                        pacc_k1.append(param_acc_k1)
+                        pacc_k5.append(param_acc_k5)
+                        pacc_k10.append(param_acc_k10)
                         """
                         par = self.params[0]
                         # print json values (converted from onehot to param interval values)
@@ -1135,9 +1521,19 @@ class Regressor:
                     acc = np.nanmean(pacc)
                     fscore = np.nanmean(pfscore)
                     medR = np.nanmean(pmedR)
+                    Rk1 = np.nanmean(pRk1)
+                    Rk5 = np.nanmean(pRk5)
+                    Rk10 = np.nanmean(pRk10)
+                    AUC = np.nanmean(pAUC)
+                    prec_k1 = np.nanmean(pprec_k1)
+                    prec_k5 = np.nanmean(pprec_k5)
+                    prec_k10 = np.nanmean(pprec_k10)
                     rec_k1 = np.nanmean(preca_k1)
                     rec_k5 = np.nanmean(preca_k5)
                     rec_k10 = np.nanmean(preca_k10)
+                    pacc_k1 = np.nanmean(pacc_k1)
+                    pacc_k5 = np.nanmean(pacc_k5)
+                    pacc_k10 = np.nanmean(pacc_k10)
                     # Debug
                     if self.debug:
                         print(
@@ -1157,20 +1553,50 @@ class Regressor:
                             + " medR="
                             + str(float(medR))
                             + " R@1="
-                            + str(float(rec_k1))
+                            + str(float(Rk1))
                             + " R@5="
-                            + str(float(rec_k5))
+                            + str(float(Rk5))
                             + " R@10="
+                            + str(float(Rk10))
+                            + " AUC="
+                            + str(float(AUC))
+                            + " Precision@1="
+                            + str(float(prec_k1))
+                            + " Precision@5="
+                            + str(float(prec_k5))
+                            + " Precision@10="
+                            + str(float(prec_k10))
+                            + " Recall@1="
+                            + str(float(rec_k1))
+                            + " Recall@5="
+                            + str(float(rec_k5))
+                            + " Recall@10="
                             + str(float(rec_k10))
+                            + " Accuracy@1="
+                            + str(float(acc_k1))
+                            + " Accuracy@5="
+                            + str(float(acc_k5))
+                            + " Accuracy@10="
+                            + str(float(acc_k10))
                         )
                 precs = np.append(precs, prec)
                 recs = np.append(recs, rec)
                 accs = np.append(accs, acc)
                 fscores = np.append(fscores, fscore)
                 medRs = np.append(medRs, medR)
+                Rk1s = np.append(Rk1s, Rk1)
+                Rk5s = np.append(Rk5s, Rk5)
+                Rk10s = np.append(Rk10s, Rk10)
+                AUCs = np.append(AUCs, AUC)
+                precs_k1 = np.append(precs_k1, prec_k1)
+                precs_k5 = np.append(precs_k5, prec_k5)
+                precs_k10 = np.append(precs_k10, prec_k10)
                 recs_k1 = np.append(recs_k1, rec_k1)
                 recs_k5 = np.append(recs_k5, rec_k5)
                 recs_k10 = np.append(recs_k10, rec_k10)
+                accs_k1 = np.append(accs_k1, acc_k1)
+                accs_k5 = np.append(accs_k5, acc_k5)
+                accs_k10 = np.append(accs_k10, acc_k10)
 
                 if self.cuda:
                     losses = np.append(losses, loss.data.cpu().numpy())
@@ -1180,15 +1606,25 @@ class Regressor:
                 filenames.append(filename)
                 ranks.append(rank)
 
-            epoch_loss = np.nanmean(losses)
-            epoch_prec = np.nanmean(precs)
-            epoch_rec = np.nanmean(recs)
-            epoch_acc = np.nanmean(accs)
-            epoch_fscore = np.nanmean(fscores)
-            epoch_medR = np.nanmean(medRs)
-            epoch_rec_k1 = np.nanmean(recs_k1)
-            epoch_rec_k5 = np.nanmean(recs_k5)
-            epoch_rec_k10 = np.nanmean(recs_k10)
+            epoch_loss = np.nanmean(losses) if len(losses) > 0 else np.nan
+            epoch_prec = np.nanmean(precs) if len(precs) > 0 else np.nan
+            epoch_rec = np.nanmean(recs) if len(recs) > 0 else np.nan
+            epoch_acc = np.nanmean(accs) if len(accs) > 0 else np.nan
+            epoch_fscore = np.nanmean(fscores) if len(fscores) > 0 else np.nan
+            epoch_medR = np.nanmean(medRs) if len(medRs) > 0 else np.nan
+            epoch_Rk1 = np.nanmean(Rk1s) if len(Rk1s) > 0 else np.nan
+            epoch_Rk5 = np.nanmean(Rk5s) if len(Rk5s) > 0 else np.nan
+            epoch_Rk10 = np.nanmean(Rk10s) if len(Rk10s) > 0 else np.nan
+            epoch_AUC = np.nanmean(AUCs) if len(AUCs) > 0 else np.nan
+            epoch_prec_k1 = np.nanmean(precs_k1) if len(precs_k1) > 0 else np.nan
+            epoch_prec_k5 = np.nanmean(precs_k5) if len(precs_k5) > 0 else np.nan
+            epoch_prec_k10 = np.nanmean(precs_k10) if len(precs_k10) > 0 else np.nan
+            epoch_rec_k1 = np.nanmean(recs_k1) if len(recs_k1) > 0 else np.nan
+            epoch_rec_k5 = np.nanmean(recs_k5) if len(recs_k5) > 0 else np.nan
+            epoch_rec_k10 = np.nanmean(recs_k10) if len(recs_k10) > 0 else np.nan
+            epoch_acc_k1 = np.nanmean(accs_k1) if len(accs_k1) > 0 else np.nan
+            epoch_acc_k5 = np.nanmean(accs_k5) if len(accs_k5) > 0 else np.nan
+            epoch_acc_k10 = np.nanmean(accs_k10) if len(accs_k10) > 0 else np.nan
             print(
                 "Val Step = %d" % epoch
                 + " Loss = %.4f" % epoch_loss
@@ -1197,9 +1633,19 @@ class Regressor:
                 + " Recall = %.4f" % epoch_rec
                 + " Fscore = %.4f" % epoch_fscore
                 + " medR = %.4f" % epoch_medR
-                + " R@1 = %.4f" % epoch_rec_k1
-                + " R@5 = %.4f" % epoch_rec_k5
-                + " R@10 = %.4f" % epoch_rec_k10
+                + " R@1 = %.4f" % epoch_Rk1
+                + " R@5 = %.4f" % epoch_Rk5
+                + " R@10 = %.4f" % epoch_Rk10
+                + " AUC = %.4f" % epoch_AUC
+                + " Precision@1 = %.4f" % epoch_prec_k1
+                + " Precision@5 = %.4f" % epoch_prec_k5
+                + " Precision@10 = %.4f" % epoch_prec_k10
+                + " Recall@1 = %.4f" % epoch_rec_k1
+                + " Recall@5 = %.4f" % epoch_rec_k5
+                + " Recall@10 = %.4f" % epoch_rec_k10
+                + " Accuracy@1 = %.4f" % epoch_acc_k1
+                + " Accuracy@5 = %.4f" % epoch_acc_k5
+                + " Accuracy@10 = %.4f" % epoch_acc_k10
             )
 
             # Get top and worst K crop filenames
@@ -1219,9 +1665,19 @@ class Regressor:
                 epoch_acc,
                 epoch_fscore,
                 epoch_medR,
+                epoch_Rk1,
+                epoch_Rk5,
+                epoch_Rk10,
+                epoch_AUC,
+                epoch_prec_k1,
+                epoch_prec_k5,
+                epoch_prec_k10,
                 epoch_rec_k1,
                 epoch_rec_k5,
                 epoch_rec_k10,
+                epoch_acc_k1,
+                epoch_acc_k5,
+                epoch_acc_k10,
                 topK,
                 worstK,
                 topK_ranks,
@@ -1237,46 +1693,22 @@ if __name__ == "__main__":
     reg = Regressor(args)
 
     # plot stats
-    stats_file = reg.output_path + "/" + "stats.csv"
-    if args.plot_only and os.path.exists(stats_file):
+    stats_file = os.path.join(reg.output_path, "stats.csv")
+    if args.plot_only is True or os.path.exists(stats_file):
         results_array = np.loadtxt(stats_file, delimiter=",")
-        diff_epoch = reg.epochs - len(results_array[0])
-        if diff_epoch > 0:
+        diff_epoch = reg.epochs - np.shape(results_array)[1]
+        if diff_epoch == 0:
             print("Found " + stats_file + " plotting...")
             plot_single(reg.output_path)
             plot_benchmark(os.path.dirname(reg.output_path))
             exit()
         else:
             print("Found " + stats_file + " but not all epoch, re-training")
-            loaded_ckpt = reg.load_ckpt()
             args.resume = False  # train instead of deploy
             # reg.epochs = reg.epochs - diff_epoch # stats will not be appended so run all again
 
     # TRAIN+VAL (depending if checkpoint exists)
     if args.resume is False:
-        train_dataset = Dataset(
-            "train",
-            args.trainds,
-            args.traindsinput,
-            args.num_crops,
-            args.input_size,
-            args.splits[0],
-        )  # set num_crops as split proportion
-        train_dataset.__modify__(reg.ds_modifiers, args.overwrite_modifiers)
-        train_dataset.__crop__(args.overwrite_crops)
-        print(
-            "Prepared Train Dataset "
-            + "("
-            + str(train_dataset.__len__())
-            + ") images x modifiers x crops"
-        )
-        train_loader = torch.utils.data.DataLoader(
-            dataset=train_dataset,
-            batch_size=reg.batch_size,
-            shuffle=args.data_shuffle,
-            num_workers=args.workers,
-            pin_memory=True,
-        )
         val_dataset = Dataset(
             "test",
             args.valds,
@@ -1300,8 +1732,41 @@ if __name__ == "__main__":
             num_workers=args.workers,
             pin_memory=True,
         )
-        if args.data_only is True:
+        if (
+            args.validate_only is True and args.data_only is True
+        ):  # validate data only condition
             exit()
+        train_dataset = Dataset(
+            "train",
+            args.trainds,
+            args.traindsinput,
+            args.num_crops,
+            args.input_size,
+            args.splits[0],
+        )  # set num_crops as split proportion
+        train_dataset.__modify__(reg.ds_modifiers, args.overwrite_modifiers)
+        train_dataset.__crop__(args.overwrite_crops)
+        print(
+            "Prepared Train Dataset "
+            + "("
+            + str(train_dataset.__len__())
+            + ") images x modifiers x crops"
+        )
+        train_loader = torch.utils.data.DataLoader(
+            dataset=train_dataset,
+            batch_size=reg.batch_size,
+            shuffle=args.data_shuffle,
+            num_workers=args.workers,
+            pin_memory=True,
+        )
+        if args.data_only is True:  # data only condition
+            exit()
+        if (
+            os.path.exists(reg.checkpoint_path) is False
+        ):  # force train if checkpoint does not exist
+            reg.validate_only = False
+        else:  # load model if checkpoint exists
+            loaded_ckpt = reg.load_ckpt()
         # Train and validate regressor
         reg.train_val(train_loader, val_loader)
     else:

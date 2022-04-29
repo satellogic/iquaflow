@@ -1,6 +1,6 @@
 import os
 import shutil
-from typing import Any, List
+from typing import Any, List, Tuple
 
 import numpy as np
 import torch
@@ -27,6 +27,7 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
         num_crops: int = 50,
         crop_size: List[int] = [256, 256],
         split_percent: float = 1.0,
+        img_size: Tuple[int, int] = (5000, 5000),
     ):
         self.split_name = split_name
         self.data_path = data_path
@@ -34,6 +35,7 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
         self.num_crops = num_crops
         self.crop_size = crop_size
         self.split_percent = split_percent
+        self.img_size = img_size
         # list images to split
         lists_files = [
             self.data_input + "/" + filename for filename in os.listdir(self.data_input)
@@ -59,7 +61,6 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
                 transforms.CenterCrop(size=(self.crop_size[0], self.crop_size[1])),
             ]
         )
-        self.img_size = (5000, 5000)  # default
 
     def __len__(self) -> int:
         """
@@ -170,7 +171,7 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
                         os.path.join(old_dir, file_name),
                         os.path.join(split_dir, file_name),
                     )
-                os.rmdir(old_dir)
+                shutil.rmtree(old_dir)
                 ds_wrapper_modified.data_input = split_dir
                 list_mod_files = [
                     ds_wrapper_modified.data_input + "/" + filename
@@ -193,15 +194,25 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
             self.crops_permut_y = []
             self.crops_permut_x = []
             for cidx in range(self.num_crops):
+                x_diff = (
+                    self.img_size[1] - self.crop_size[1]
+                    if self.img_size[1] > self.crop_size[1]
+                    else 1
+                )
+                y_diff = (
+                    self.img_size[0] - self.crop_size[0]
+                    if self.img_size[0] > self.crop_size[0]
+                    else 1
+                )
                 self.crops_permut_y.append(
                     np.random.choice(
-                        self.img_size[0] - self.crop_size[0],
+                        y_diff,
                         len(self.lists_mod_files[0]),
                     )
                 )
                 self.crops_permut_x.append(
                     np.random.choice(
-                        self.img_size[1] - self.crop_size[1],
+                        x_diff,
                         len(self.lists_mod_files[0]),
                     )
                 )
@@ -214,18 +225,21 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
                     filename_noext = os.path.splitext(os.path.basename(filename))[0]
                     # if "train_images" in filename:
                     #     import pdb; pdb.set_trace()
+                    crops_folder = (
+                        os.path.dirname(filename)
+                        + "_"
+                        + str(self.num_crops)
+                        + "crops"
+                        + str(self.crop_size[0])
+                        + "x"
+                        + str(self.crop_size[1])
+                    )
+                    if not os.path.exists(crops_folder):
+                        os.mkdir(crops_folder)
+                    elif overwrite is True:
+                        shutil.rmtree(crops_folder)
+                        os.mkdir(crops_folder)
                     for cidx in range(self.num_crops):
-                        crops_folder = (
-                            os.path.dirname(filename)
-                            + "_"
-                            + str(self.num_crops)
-                            + "crops"
-                            + str(self.crop_size[0])
-                            + "x"
-                            + str(self.crop_size[1])
-                        )
-                        if not os.path.exists(crops_folder):
-                            os.mkdir(crops_folder)
                         filename_cropped = (
                             crops_folder
                             + "/"
@@ -268,12 +282,22 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
                             )
                             if self.mod_keys[midx] == "rer":
                                 while check_if_contains_edges(crop_array) is False:
+                                    x_diff = (
+                                        self.img_size[1] - self.crop_size[1]
+                                        if self.img_size[1] > self.crop_size[1]
+                                        else 1
+                                    )
+                                    y_diff = (
+                                        self.img_size[0] - self.crop_size[0]
+                                        if self.img_size[0] > self.crop_size[0]
+                                        else 1
+                                    )
                                     self.crops_permut_y[cidx] = np.random.choice(
-                                        self.img_size[0] - self.crop_size[0],
+                                        y_diff,
                                         len(self.lists_mod_files[0]),
                                     )
                                     self.crops_permut_x[cidx] = np.random.choice(
-                                        self.img_size[1] - self.crop_size[1],
+                                        x_diff,
                                         len(self.lists_mod_files[0]),
                                     )
                                     preproc_image = transforms.functional.crop(
@@ -290,12 +314,22 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
                                     )
                             elif self.mod_keys[midx] == "snr":
                                 while check_if_contains_homogenous(crop_array) is False:
+                                    x_diff = (
+                                        self.img_size[1] - self.crop_size[1]
+                                        if self.img_size[1] > self.crop_size[1]
+                                        else 1
+                                    )
+                                    y_diff = (
+                                        self.img_size[0] - self.crop_size[0]
+                                        if self.img_size[0] > self.crop_size[0]
+                                        else 1
+                                    )
                                     self.crops_permut_y[cidx] = np.random.choice(
-                                        self.img_size[0] - self.crop_size[0],
+                                        y_diff,
                                         len(self.lists_mod_files[0]),
                                     )
                                     self.crops_permut_x[cidx] = np.random.choice(
-                                        self.img_size[1] - self.crop_size[1],
+                                        x_diff,
                                         len(self.lists_mod_files[0]),
                                     )
                                     preproc_image = transforms.functional.crop(
@@ -323,32 +357,41 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
             self.crops_permut_y = []
             self.crops_permut_x = []
             for cidx in range(self.num_crops):
+                x_diff = (
+                    self.img_size[1] - self.crop_size[1]
+                    if self.img_size[1] > self.crop_size[1]
+                    else 1
+                )
+                y_diff = (
+                    self.img_size[0] - self.crop_size[0]
+                    if self.img_size[0] > self.crop_size[0]
+                    else 1
+                )
                 self.crops_permut_y.append(
-                    np.random.choice(
-                        self.img_size[0] - self.crop_size[0], len(self.lists_files)
-                    )
+                    np.random.choice(y_diff, len(self.lists_files))
                 )
                 self.crops_permut_x.append(
-                    np.random.choice(
-                        self.img_size[1] - self.crop_size[1], len(self.lists_files)
-                    )
+                    np.random.choice(x_diff, len(self.lists_files))
                 )
             # cropping
             for idx, file in enumerate(self.lists_files):
                 filename = self.lists_files[idx]
                 filename_noext = os.path.splitext(os.path.basename(filename))[0]
+                crops_folder = (
+                    os.path.dirname(filename)
+                    + "_"
+                    + str(self.num_crops)
+                    + "crops"
+                    + str(self.crop_size[0])
+                    + "x"
+                    + str(self.crop_size[1])
+                )
+                if not os.path.exists(crops_folder):
+                    os.mkdir(crops_folder)
+                elif overwrite is True:
+                    shutil.rmtree(crops_folder)
+                    os.mkdir(crops_folder)
                 for cidx in range(self.num_crops):
-                    crops_folder = (
-                        os.path.dirname(filename)
-                        + "_"
-                        + str(self.num_crops)
-                        + "crops"
-                        + str(self.crop_size[0])
-                        + "x"
-                        + str(self.crop_size[1])
-                    )
-                    if not os.path.exists(crops_folder):
-                        os.mkdir(crops_folder)
                     filename_cropped = (
                         crops_folder
                         + "/"
@@ -366,10 +409,6 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
                             + ")"
                             + " for "
                             + filename_noext
-                            + " with "
-                            + str(self.mod_keys[midx])
-                            + " "
-                            + str(self.mod_params[midx])
                         )
                         image = Image.open(filename)
                         image_tensor = transforms.functional.to_tensor(
@@ -387,4 +426,4 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
                         self.mod_resol.append(image.size)
                     self.lists_crop_files.append(filename_cropped)
                     # print(self.lists_crop_files[-1])  # print last sample name
-                os.remove(filename)  # remove modded image to clean disk
+                # os.remove(filename)  # remove modded image to clean disk

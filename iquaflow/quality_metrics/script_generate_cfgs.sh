@@ -5,10 +5,10 @@ cfg_folder_root="cfgs"
 #RUN
 trainid="test" # prefix
 #PATHS
-trainds="/home/Imatge/projects/satellogic/iquaflow-/tests/test_datasets/AerialImageDataset"
-traindsinput="/home/Imatge/projects/satellogic/iquaflow-/tests/test_datasets/AerialImageDataset/train/images"
-valds="/home/Imatge/projects/satellogic/iquaflow-/tests/test_datasets/AerialImageDataset"
-valdsinput="/home/Imatge/projects/satellogic/iquaflow-/tests/test_datasets/AerialImageDataset/test/images"
+trainds="/home/Imatge/projects/satellogic/iquaflow/tests/test_datasets/AerialImageDataset"
+traindsinput="/home/Imatge/projects/satellogic/iquaflow/tests/test_datasets/AerialImageDataset/train/images"
+valds="/home/Imatge/projects/satellogic/iquaflow/tests/test_datasets/AerialImageDataset"
+valdsinput="/home/Imatge/projects/satellogic/iquaflow/tests/test_datasets/AerialImageDataset/test/images"
 outputpath="tmp-"
 #HYPERPARAMS (UNIQUE)
 workers="8"

@@ -1,6 +1,6 @@
 import json
 import os
-from typing import Any, Optional
+from typing import Any, List, Optional
 
 from iquaflow.metrics import Metric
 from iquaflow.quality_metrics.regressor import Regressor, parse_params_cfg
@@ -15,7 +15,7 @@ class QualityMetrics(Metric):
         self.metric_names = list(self.regressor.modifier_params.keys())
         # self.metric_names.append("path")  # include path in results? #warning: commented cause of core error, can't log_metric a string of path
 
-    def apply(self, predictions: str, gt_path: Optional[str] = None) -> Any:
+    def read_files(self, predictions: str, gt_path: Optional[str] = None) -> Any:
         # old
         """
         ds_folder=os.path.dirname(gt_path)
@@ -40,9 +40,13 @@ class QualityMetrics(Metric):
         image_files = os.listdir(images_path)
         for idx, image_name in enumerate(image_files):
             image_files[idx] = images_path + "/" + image_name  # abs_images_folder
-        # run regressor deploy to get sigma stats
-        # IMPORTANT, PUT RESUME bool to TRUE
-        stats = self.regressor.deploy(image_files)
+        return image_files
+
+    def deploy_stats(self, image_files: List[str]) -> Any:
+        # run regressor deploy to get stats
+        return self.regressor.deploy(image_files)
+
+    def get_results(self, stats: Any) -> Any:
         """
         # group results with metrics
         results = []
@@ -52,8 +56,13 @@ class QualityMetrics(Metric):
             }  # must be list for zipping dict
             results.append(result)
         """
-
         # unify images stats by average -> considering single parameter
         avg_stats = sum(stats) / len(stats)
         results = {k: v for k, v in zip(self.metric_names, [avg_stats])}
+        return results
+
+    def apply(self, predictions: str, gt_path: Optional[str] = None) -> Any:
+        image_files = self.read_files(predictions, gt_path)
+        stats = self.deploy_stats(image_files)
+        results = self.get_results(stats)
         return results

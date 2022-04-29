@@ -6,20 +6,23 @@ import mlflow
 from iquaflow.datasets import DSModifier, DSWrapper
 from iquaflow.experiments import ExperimentInfo, ExperimentSetup
 from iquaflow.experiments.task_execution import PythonScriptTaskExecution
-from iquaflow.quality_metrics import (  # ResolScaleMetrics,
+from iquaflow.quality_metrics import (
     GaussianBlurMetrics,
+    GSDMetrics,
     NoiseSharpnessMetrics,
     QualityMetrics,
     RERMetrics,
+    ScoreMetrics,
     SNRMetrics,
 )
 
 results = {
     "sigma": 1.0,
-    "snr": 27.5,
-    "rer": 0.4,
     "sharpness": 1.0,
-    "scale": 0.24,
+    "rer": 0.4,
+    "snr": 27.5,
+    "scale": 0.416,
+    "score": 0.861,
 }
 
 current_path = os.path.dirname(os.path.realpath(__file__))
@@ -70,21 +73,7 @@ def check_metric_result(metric: QualityMetrics, metric_name: str) -> None:
     remove_mlruns()
 
 
-class TestRegressorMetrics:
-    def test_apply_method_rer(self):
-        metric = RERMetrics()
-        assert hasattr(metric, "apply"), "RER metric has not attr apply"
-        assert callable(
-            getattr(metric, "apply")
-        ), "RER metric attr apply is not callable"
-
-    def test_apply_method_snr(self):
-        metric = SNRMetrics()
-        assert hasattr(metric, "apply"), "SNR metric has not attr apply"
-        assert callable(
-            getattr(metric, "apply")
-        ), "SNR metric attr apply is not callable"
-
+class TestQualityMetrics:
     def test_apply_method_gaussianblur(self):
         metric = GaussianBlurMetrics()
         assert hasattr(metric, "apply"), "GaussianBlur metric has not attr apply"
@@ -99,18 +88,33 @@ class TestRegressorMetrics:
             getattr(metric, "apply")
         ), "NoiseSharpness metric attr apply is not callable"
 
-    #    def test_apply_method_resolscale(self):
-    #        metric = ResolScaleMetrics()
-    #        assert hasattr(metric, "apply"), "ResolScale metric has not attr apply"
-    #        assert callable(
-    #            getattr(metric, "apply")
-    #        ), "ResolScale metric attr apply is not callable"
+    def test_apply_method_rer(self):
+        metric = RERMetrics()
+        assert hasattr(metric, "apply"), "RER metric has not attr apply"
+        assert callable(
+            getattr(metric, "apply")
+        ), "RER metric attr apply is not callable"
 
-    def test_metric_result_rer(self):
-        check_metric_result(RERMetrics(), "rer")
+    def test_apply_method_snr(self):
+        metric = SNRMetrics()
+        assert hasattr(metric, "apply"), "SNR metric has not attr apply"
+        assert callable(
+            getattr(metric, "apply")
+        ), "SNR metric attr apply is not callable"
 
-    def test_metric_result_snr(self):
-        check_metric_result(SNRMetrics(), "snr")
+    def test_apply_method_gsd(self):
+        metric = GSDMetrics()
+        assert hasattr(metric, "apply"), "GSD metric has not attr apply"
+        assert callable(
+            getattr(metric, "apply")
+        ), "GSD metric attr apply is not callable"
+
+    def test_apply_method_score(self):
+        metric = NoiseSharpnessMetrics()
+        assert hasattr(metric, "apply"), "Score metric has not attr apply"
+        assert callable(
+            getattr(metric, "apply")
+        ), "Score metric attr apply is not callable"
 
     def test_metric_result_gaussianblur(self):
         check_metric_result(GaussianBlurMetrics(), "sigma")
@@ -118,6 +122,14 @@ class TestRegressorMetrics:
     def test_metric_result_noisesharpness(self):
         check_metric_result(NoiseSharpnessMetrics(), "sharpness")
 
-    def test_metric_result_resolscale(self):
-        pass
-        # check_metric_result(ResolScaleMetrics(), "scale")
+    def test_metric_result_rer(self):
+        check_metric_result(RERMetrics(), "rer")
+
+    def test_metric_result_snr(self):
+        check_metric_result(SNRMetrics(), "snr")
+
+    def test_metric_result_gsd(self):
+        check_metric_result(GSDMetrics(), "scale")
+
+    def test_metric_result_score(self):
+        check_metric_result(ScoreMetrics(), "score")
