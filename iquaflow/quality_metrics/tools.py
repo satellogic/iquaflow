@@ -244,7 +244,7 @@ def check_if_contains_homogenous(
     image: Any,
     lower_canny_thres: float = 0,
     upper_canny_thres: Any = 30,
-    percent_edges_threshold: Any = 0.25,
+    percent_edges_threshold: Any = 0.35,
 ) -> Any:
     """
     Checks there are homogeneous regions sufficient for analyzing SNR.
