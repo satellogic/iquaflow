@@ -148,12 +148,23 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
                 shutil.rmtree(split_dir)
                 os.mkdir(split_dir)
 
+            # reuse if existing modified images (same exact ones)
+            basenames_lists_files = [
+                os.path.basename(file) for file in self.lists_files
+            ]
+            list_mod_same_files = [
+                os.path.join(split_dir, file)
+                for file in os.listdir(split_dir)
+                if file in basenames_lists_files
+            ]
+            """ # (alternative) reuse whole folder
             if len(os.listdir(split_dir)) >= len(self.lists_files):
-                # (or) reuse existing modified images
                 list_mod_files = [
                     split_dir + "/" + filename for filename in os.listdir(split_dir)
                 ]
-
+            """
+            if len(list_mod_same_files) == len(self.lists_files):
+                list_mod_files = list_mod_same_files
             else:
                 ds_wrapper_modified = ds_modifier.modify_ds_wrapper(
                     ds_wrapper=ds_wrapper
