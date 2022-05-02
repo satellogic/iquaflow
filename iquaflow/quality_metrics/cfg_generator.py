@@ -1,6 +1,7 @@
 import argparse
 import itertools
 import os
+from copy import deepcopy
 from typing import Any, Dict, List, Tuple
 
 # import json
@@ -93,7 +94,7 @@ def args2powersetdict(
 
     # loop: create dict of args with values
     for pset in combinations:
-        cfg_dict = dict_args_cfg_empty  # current cfg
+        cfg_dict = deepcopy(dict_args_cfg_empty)  # current cfg
         trainid_combi = ""
         # COMBINATION ARGUMENTS
         for idx, arg in enumerate(powerset_args):
@@ -128,7 +129,7 @@ def args2powersetdict(
             .replace(",", "-")
         )
         # append lists of dict (configparse combinations) and trainids as names of files
-        dicts_sets.append(cfg_dict)
+        dicts_sets.append(deepcopy(cfg_dict))
         names_sets.append(trainid_combi)
     return dicts_sets, names_sets
 
