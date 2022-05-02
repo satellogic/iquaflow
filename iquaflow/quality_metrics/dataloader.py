@@ -281,7 +281,10 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
                                 )
                             )
                             if self.mod_keys[midx] == "rer":
-                                while check_if_contains_edges(crop_array) is False:
+                                while (
+                                    check_if_contains_edges(crop_array, 0, 100, 0.02)
+                                    is False
+                                ):
                                     x_diff = (
                                         self.img_size[1] - self.crop_size[1]
                                         if self.img_size[1] > self.crop_size[1]
@@ -313,7 +316,12 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
                                         )
                                     )
                             elif self.mod_keys[midx] == "snr":
-                                while check_if_contains_homogenous(crop_array) is False:
+                                while (
+                                    check_if_contains_homogenous(
+                                        crop_array, 0, 30, 0.35
+                                    )
+                                    is False
+                                ):
                                     x_diff = (
                                         self.img_size[1] - self.crop_size[1]
                                         if self.img_size[1] > self.crop_size[1]
