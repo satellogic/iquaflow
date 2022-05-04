@@ -254,3 +254,47 @@ def check_if_contains_homogenous(
     """
     edges = cv2.Canny(image, lower_canny_thres, upper_canny_thres)
     return edges[edges == 255].size / edges.size < percent_edges_threshold
+
+
+def replace_crop_permut(
+    sub_crops_permut_y: Any,
+    sub_crops_permut_x: Any,
+    num_images: int,
+    img_size: Any,
+    crop_size: Any,
+) -> Any:
+    x_diff = img_size[1] - crop_size[1] if img_size[1] > crop_size[1] else 1
+    y_diff = img_size[0] - crop_size[0] if img_size[0] > crop_size[0] else 1
+    sub_crops_permut_y = np.random.choice(
+        y_diff,
+        num_images,
+    )
+    sub_crops_permut_x = np.random.choice(
+        x_diff,
+        num_images,
+    )
+    return np.squeeze(sub_crops_permut_y), np.squeeze(sub_crops_permut_x)
+
+
+def generate_crop_permut(
+    num_crops: int, num_images: int, img_size: Any, crop_size: Any
+) -> Any:
+    # generating crops permutation
+    crops_permut_y = []
+    crops_permut_x = []
+    for cidx in range(num_crops):
+        x_diff = img_size[1] - crop_size[1] if img_size[1] > crop_size[1] else 1
+        y_diff = img_size[0] - crop_size[0] if img_size[0] > crop_size[0] else 1
+        crops_permut_y.append(
+            np.random.choice(
+                y_diff,
+                num_images,
+            )
+        )
+        crops_permut_x.append(
+            np.random.choice(
+                x_diff,
+                num_images,
+            )
+        )
+    return np.squeeze(crops_permut_y), np.squeeze(crops_permut_x)
