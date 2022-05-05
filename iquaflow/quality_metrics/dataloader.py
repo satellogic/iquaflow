@@ -37,7 +37,7 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
         self.num_crops = num_crops
         self.crop_size = crop_size
         self.split_percent = split_percent
-        self.img_size = img_size
+        self.default_img_size = img_size
         # list images to split
         lists_files = [
             self.data_input + "/" + filename for filename in os.listdir(self.data_input)
@@ -124,6 +124,7 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
         self.lists_mod_files = []  # one per each modifier
         self.mod_keys = []  # one per each modifier
         self.mod_params = []  # one per each modifier
+        self.mod_sizes = []  # one per each modifier
         for midx in range(len(ds_modifiers)):
             ds_modifier = ds_modifiers[midx]
             mod_key = next(
@@ -190,12 +191,14 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
                     ds_wrapper_modified.data_input + "/" + filename
                     for filename in os.listdir(ds_wrapper_modified.data_input)
                 ]
-            list_mod_files = split_list(list_mod_files, self.split_percent)
+            # list_mod_files = split_list(list_mod_files, self.split_percent)
+            mod_size = Image.open(list_mod_files[-1]).size
             self.lists_mod_files.append(list_mod_files)
             self.mod_keys.append(mod_key)
             self.mod_params.append(mod_param)
             # print(self.lists_mod_files[-1])
-            self.img_size = Image.open(self.lists_mod_files[midx][0]).size
+            self.mod_sizes.append(mod_size)
+            self.default_img_size = np.nanmin(np.array(self.mod_sizes), axis=0)
 
     def __crop__(self, overwrite: bool = False) -> None:
         self.list_crop_files: List[str] = []
@@ -206,7 +209,7 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
             # generating crops permutation
             num_images = len(self.lists_mod_files[0])
             self.crops_permut_y, self.crops_permut_x = generate_crop_permut(
-                self.num_crops, num_images, self.img_size, self.crop_size
+                self.num_crops, num_images, self.default_img_size, self.crop_size
             )
             # for each modifier
             for midx, list_mod_files in enumerate(self.lists_mod_files):
@@ -260,18 +263,32 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
                             ).unsqueeze_(0)
                             # else: reuse image if existing
                             # preproc_image = self.tCROP(image_tensor)
-                            preproc_image = transforms.functional.crop(
-                                image_tensor,
-                                self.crops_permut_y[cidx][idx],
-                                self.crops_permut_x[cidx][idx],
-                                self.crop_size[0],
-                                self.crop_size[1],
-                            )
-                            crop_array = np.array(
-                                transforms.functional.to_pil_image(
-                                    (torch.squeeze(preproc_image))
+                            # (gsd case): adapt rescaled coords to current mod_size
+                            if self.mod_keys[midx] == "scale":
+                                resize_ratio_y = (
+                                    self.mod_sizes[midx][0] / self.default_img_size[0]
                                 )
-                            )
+                                resize_ratio_x = (
+                                    self.mod_sizes[midx][1] / self.default_img_size[1]
+                                )
+                                crop_resized_coords_y = int(
+                                    self.crops_permut_y[cidx][idx] * resize_ratio_y
+                                )
+                                crop_resized_coords_x = int(
+                                    self.crops_permut_x[cidx][idx] * resize_ratio_x
+                                )
+                                preproc_image = transforms.functional.crop(
+                                    image_tensor,
+                                    crop_resized_coords_y,
+                                    crop_resized_coords_x,
+                                    self.crop_size[0],
+                                    self.crop_size[1],
+                                )
+                                crop_array = np.array(
+                                    transforms.functional.to_pil_image(
+                                        (torch.squeeze(preproc_image))
+                                    )
+                                )
                             if self.mod_keys[midx] == "rer":
                                 # check crop requirement 100 times (at max)
                                 check_count = 100
@@ -288,7 +305,7 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
                                         self.crops_permut_y[cidx][idx],
                                         self.crops_permut_x[cidx][idx],
                                         1,
-                                        self.img_size,
+                                        self.default_img_size,
                                         self.crop_size,
                                     )
                                     preproc_image = transforms.functional.crop(
@@ -319,7 +336,7 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
                                         self.crops_permut_y[cidx][idx],
                                         self.crops_permut_x[cidx][idx],
                                         1,
-                                        self.img_size,
+                                        self.default_img_size,
                                         self.crop_size,
                                     )
                                     preproc_image = transforms.functional.crop(
@@ -334,6 +351,19 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
                                             (torch.squeeze(preproc_image))
                                         )
                                     )
+                            else:  # all other modifier cases
+                                preproc_image = transforms.functional.crop(
+                                    image_tensor,
+                                    self.crops_permut_y[cidx][idx],
+                                    self.crops_permut_x[cidx][idx],
+                                    self.crop_size[0],
+                                    self.crop_size[1],
+                                )
+                                crop_array = np.array(
+                                    transforms.functional.to_pil_image(
+                                        (torch.squeeze(preproc_image))
+                                    )
+                                )
                             self.mod_resol.append(image.size)
                             save_image(preproc_image, filename_cropped)
                         else:
@@ -349,7 +379,7 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
             # generating crops permutation
             num_images = len(self.lists_files)
             self.crops_permut_y, self.crops_permut_x = generate_crop_permut(
-                self.num_crops, num_images, self.img_size, self.crop_size
+                self.num_crops, num_images, self.default_img_size, self.crop_size
             )
             # check crops folder
             filename_ini = self.lists_files[0]
