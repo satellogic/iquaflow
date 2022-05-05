@@ -4,13 +4,8 @@ from typing import Any, List, Tuple
 
 import numpy as np
 import torch
-from PIL import Image
-from torch.autograd import Variable
-from torchvision import transforms
-from torchvision.utils import save_image
-
-from iquaflow.datasets import DSWrapper
-from iquaflow.quality_metrics.tools import (
+from iq_tool_box.datasets import DSWrapper
+from iq_tool_box.quality_metrics.tools import (
     check_if_contains_edges,
     check_if_contains_homogenous,
     force_rgb,
@@ -18,6 +13,10 @@ from iquaflow.quality_metrics.tools import (
     replace_crop_permut,
     split_list,
 )
+from PIL import Image
+from torch.autograd import Variable
+from torchvision import transforms
+from torchvision.utils import save_image
 
 
 class Dataset(torch.utils.data.Dataset):  # type: ignore
@@ -261,8 +260,20 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
                             image_tensor = transforms.functional.to_tensor(
                                 image
                             ).unsqueeze_(0)
-                            # else: reuse image if existing
+                            # all modifier cases
+                            preproc_image = transforms.functional.crop(
+                                image_tensor,
+                                self.crops_permut_y[cidx][idx],
+                                self.crops_permut_x[cidx][idx],
+                                self.crop_size[0],
+                                self.crop_size[1],
+                            )
                             # preproc_image = self.tCROP(image_tensor)
+                            crop_array = np.array(
+                                transforms.functional.to_pil_image(
+                                    (torch.squeeze(preproc_image))
+                                )
+                            )
                             # (gsd case): adapt rescaled coords to current mod_size
                             if self.mod_keys[midx] == "scale":
                                 resize_ratio_y = (
@@ -351,19 +362,6 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
                                             (torch.squeeze(preproc_image))
                                         )
                                     )
-                            else:  # all other modifier cases
-                                preproc_image = transforms.functional.crop(
-                                    image_tensor,
-                                    self.crops_permut_y[cidx][idx],
-                                    self.crops_permut_x[cidx][idx],
-                                    self.crop_size[0],
-                                    self.crop_size[1],
-                                )
-                                crop_array = np.array(
-                                    transforms.functional.to_pil_image(
-                                        (torch.squeeze(preproc_image))
-                                    )
-                                )
                             self.mod_resol.append(image.size)
                             save_image(preproc_image, filename_cropped)
                         else:
