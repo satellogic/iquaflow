@@ -4,6 +4,7 @@ import cv2
 import numpy as np
 import torch
 from sklearn.metrics import roc_auc_score  # type: ignore
+from torchvision import transforms
 
 
 def force_rgb(x: Any) -> Any:
@@ -14,6 +15,23 @@ def force_rgb(x: Any) -> Any:
     ):  # if >3 dimensions, use first 3 to discard other dimensions (e.g. depth)
         x = x[0:3]
     return x
+
+
+def get_tensor_crop_transform(crop_size: Any, transform_type: str = "center") -> Any:
+    tensor_transform = transforms.Compose([])
+    if transform_type == "center":
+        tensor_transform = transforms.Compose(
+            [
+                transforms.CenterCrop(size=(crop_size[0], crop_size[1])),
+            ]
+        )
+    else:  # random crop location
+        tensor_transform = transforms.Compose(
+            [
+                transforms.RandomCrop(size=(crop_size[0], crop_size[1])),
+            ]
+        )
+    return tensor_transform
 
 
 def circ3d_pad(mat: Any, desired_shape: Any) -> Any:

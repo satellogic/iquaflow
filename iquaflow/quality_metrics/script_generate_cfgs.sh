@@ -5,17 +5,17 @@ cfg_folder_root="cfgs"
 #RUN
 trainid="test" # prefix
 #PATHS
-trainds="/home/Imatge/projects/satellogic/iquaflow/tests/test_datasets/AerialImageDataset"
-traindsinput="/home/Imatge/projects/satellogic/iquaflow/tests/test_datasets/AerialImageDataset/train/images"
-valds="/home/Imatge/projects/satellogic/iquaflow/tests/test_datasets/AerialImageDataset"
-valdsinput="/home/Imatge/projects/satellogic/iquaflow/tests/test_datasets/AerialImageDataset/test/images"
+trainds="/home/Imatge/projects/satellogic/iq_tool_box-/tests/test_datasets/AerialImageDataset"
+traindsinput="/home/Imatge/projects/satellogic/iq_tool_box-/tests/test_datasets/AerialImageDataset/train/images"
+valds="/home/Imatge/projects/satellogic/iq_tool_box-/tests/test_datasets/AerialImageDataset"
+valdsinput="/home/Imatge/projects/satellogic/iq_tool_box-/tests/test_datasets/AerialImageDataset/test/images"
 outputpath="tmp-"
 #HYPERPARAMS (UNIQUE)
 workers="8"
 data_shuffle="True"
 #HYPERPARAMS (SINGLE)
 epochs="200"
-splits="0.8 0.2"
+splits="0.445 0.112"
 #HYPERPARAMS (ALT)
 lr="1e-2 1e-3 1e-4 1e-5"
 weight_decay="1e-3 1e-4 1e-5"
@@ -161,6 +161,9 @@ python3 cfg_generator.py \
 --workers $workers \
 --data_shuffle $data_shuffle
 
+# separate folders on each batch size
+sh script_move_bs.sh "blur"
+
 ###################################################### BLUR (RER) 
 cfg_folder_param="${cfg_folder_root}/rer"
 num_regs=40
@@ -300,6 +303,10 @@ python3 cfg_generator.py \
 --workers $workers \
 --data_shuffle $data_shuffle
 
+
+# separate folders on each batch size
+sh script_move_bs.sh "rer"
+
 ###################################################### SHARPNESS (smooth factor)
 cfg_folder_param="${cfg_folder_root}/sharpness"
 num_regs=9
@@ -330,6 +337,7 @@ python3 cfg_generator.py \
 --batch_size $batch_size \
 --workers $workers \
 --data_shuffle $data_shuffle
+
 
 # CROPS 128
 cfg_folder="${cfg_folder_param}_100crops128"
@@ -385,6 +393,8 @@ python3 cfg_generator.py \
 --workers $workers \
 --data_shuffle $data_shuffle
 
+
+
 # CROPS 512
 cfg_folder="${cfg_folder_param}_20crops512"
 num_crops=20
@@ -412,6 +422,8 @@ python3 cfg_generator.py \
 --workers $workers \
 --data_shuffle $data_shuffle
 
+
+
 # CROPS 1024
 cfg_folder="${cfg_folder_param}_10crops1024"
 num_crops=10
@@ -438,6 +450,9 @@ python3 cfg_generator.py \
 --batch_size $batch_size \
 --workers $workers \
 --data_shuffle $data_shuffle
+
+# separate folders on each batch size
+sh script_move_bs.sh "sharpness"
 
 ###################################################### NOISE RATIO (SNR)
 cfg_folder_param="${cfg_folder_root}/snr"
@@ -470,6 +485,7 @@ python3 cfg_generator.py \
 --workers $workers \
 --data_shuffle $data_shuffle
 
+
 # CROPS 128
 cfg_folder="${cfg_folder_param}_100crops128"
 num_crops=100
@@ -496,6 +512,7 @@ python3 cfg_generator.py \
 --batch_size $batch_size \
 --workers $workers \
 --data_shuffle $data_shuffle
+
 
 # CROPS 256
 cfg_folder="${cfg_folder_param}_50crops256"
@@ -524,6 +541,7 @@ python3 cfg_generator.py \
 --workers $workers \
 --data_shuffle $data_shuffle
 
+
 # CROPS 512
 cfg_folder="${cfg_folder_param}_20crops512"
 num_crops=20
@@ -551,6 +569,7 @@ python3 cfg_generator.py \
 --workers $workers \
 --data_shuffle $data_shuffle
 
+
 # CROPS 1024
 cfg_folder="${cfg_folder_param}_10crops1024"
 num_crops=10
@@ -577,6 +596,9 @@ python3 cfg_generator.py \
 --batch_size $batch_size \
 --workers $workers \
 --data_shuffle $data_shuffle
+
+# separate folders on each batch size
+sh script_move_bs.sh "snr"
 
 ###################################################### SCALE (GSD)
 cfg_folder_param="${cfg_folder_root}/gsd"
@@ -609,6 +631,7 @@ python3 cfg_generator.py \
 --workers $workers \
 --data_shuffle $data_shuffle
 
+
 # CROPS 128
 cfg_folder="${cfg_folder_param}_100crops128"
 num_crops=100
@@ -635,6 +658,7 @@ python3 cfg_generator.py \
 --batch_size $batch_size \
 --workers $workers \
 --data_shuffle $data_shuffle
+
 
 # CROPS 256
 cfg_folder="${cfg_folder_param}_50crops256"
@@ -669,6 +693,7 @@ num_crops=20
 input_size="512 512"
 batch_size="8 16 32 64"
 
+
 python3 cfg_generator.py \
 --cfg_folder $cfg_folder \
 --trainds $trainds \
@@ -689,6 +714,7 @@ python3 cfg_generator.py \
 --batch_size $batch_size \
 --workers $workers \
 --data_shuffle $data_shuffle
+
 
 # CROPS 1024
 cfg_folder="${cfg_folder_param}_10crops1024"
@@ -696,6 +722,7 @@ num_crops=10
 input_size="1024 1024"
 batch_size="4 8 16 32"
 
+
 python3 cfg_generator.py \
 --cfg_folder $cfg_folder \
 --trainds $trainds \
@@ -716,4 +743,8 @@ python3 cfg_generator.py \
 --batch_size $batch_size \
 --workers $workers \
 --data_shuffle $data_shuffle
+
+
+# separate folders on each batch size
+sh script_move_bs.sh "gsd"
 
