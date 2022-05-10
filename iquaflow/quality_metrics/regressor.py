@@ -610,12 +610,6 @@ class Regressor:
                 val_dict_results_epoch["epoch_accs_k10"]
             )
 
-            # print log
-            print_debug_whole = str(train_dict_results_epoch)
-            print("Train " + "Step " + str(epoch) + " " + print_debug_whole)
-            print_debug_whole = str(val_dict_results_epoch)
-            print("Val " + "Step " + str(epoch) + " " + print_debug_whole)
-
             # save csv and pkl
             np.savetxt(
                 os.path.join(self.output_path, "stats.csv"),
@@ -1232,10 +1226,17 @@ class Regressor:
             # Debug batch results
             if self.debug:
                 prefix = "Train " if validate is False else "Val "
-                print_debug_batch = str(dict_results_batch)
+                print_debug_batch = "\t".join(
+                    [
+                        f"{key}={dict_results_batch[key][-1]}"
+                        for key in list(dict_results_batch.keys())
+                    ]
+                )
                 print(
                     prefix
-                    + "Batch "
+                    + "Step "
+                    + str(epoch)
+                    + " Batch "
                     + str(bidx)
                     + "/"
                     + str(dataset_loader.__len__())
@@ -1298,7 +1299,12 @@ class Regressor:
             )
 
         # print log
-        print_debug_epoch = str(dict_results_epoch)
+        print_debug_epoch = "\t".join(
+            [
+                f"{key}={dict_results_epoch[key]}"
+                for key in list(dict_results_epoch.keys())
+            ]
+        )
         prefix = "Train " if validate is False else "Val "
         print(prefix + "Step " + str(epoch) + ": " + print_debug_epoch)
 
