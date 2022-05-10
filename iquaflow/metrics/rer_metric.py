@@ -1,157 +1,279 @@
-############## IMPORTANT ##############
-# temporary, does not work yet!
-
-
-import numpy as np
-import cv2
-import math
-from scipy.optimize import curve_fit
-from scipy.interpolate import CubicSpline, UnivariateSpline, interp1d
 from scipy import ndimage
 from scipy.fft import fft, fftfreq
-import os
-import matplotlib.pyplot as plt
-from medpy.filter.smoothing import anisotropic_diffusion
+from scipy.interpolate import CubicSpline, UnivariateSpline, interp1d
+from scipy.optimize import curve_fit
 from skimage import feature
 from skimage.transform import probabilistic_hough_line
-import time
+from shapely.geometry import LineString, MultiPoint
+from shapely.ops import snap
+import cv2
+from  glob import glob
 from joblib import Parallel, delayed
-DEBUG_DIR = "/home/kati/projects/iqf/iquaflow/iquaflow/metrics/rer_debug"
-import logging
-from skimage.util import view_as_windows
-# import os
-# os.environ['MKL_NUM_THREADS'] = '1'
-# os.environ['OMP_NUM_THREADS'] = '1'
-# os.environ['MKL_DYNAMIC'] = 'FALSE'
+import matplotlib.pyplot as plt
+import numpy as np
+import os
+import rasterio
+from typing import Any,  Dict, List, Optional, Tuple
+from iquaflow.metrics import Metric
 
-def f(x, a, b, c, d):
+DEBUG_DIR = "./rer_debug"
+
+def model_esf(x, a, b, c, d):
+    """
+    The model function to fit the ESF.
+    """
     try:
         return a / (1 + np.exp((x - b) / c)) + d
-    except FloatingPointError:
+    except FloatingPointError or RuntimeWarning:
         pass
 
-def gaus(x,a,x0,sigma):
+def gaussian(x,a,x0,sigma):
     return a*np.exp(-(x-x0)**2/(2*sigma**2))
 
-#np.seterr(all='raise', over='ignore')
 
-class RERMetric:
+class SharpnessMeasure:
+    """"
+    Measures the sharpness of an image.
+    The implementation is mainly based of the paper of Cenci, L. et al. 2021: "Presenting a Semi-Automatic,
+    Statistically-Based Approach to Assess the Sharpness Level of Optical Images from Natural Targets via the Edge
+    Method. Case Study: The Landsat 8 OLI-L1T Data", DOI:  https://doi.org/10.3390/rs13081593
+
+    We thank Luca Cenci and Valerio Pampanoni for their advise.
+    """
     def __init__(self,
-                 window_size,
-                 stride = None,
-                 edge_length=5,
-                 alpha=1.3,
-                 beta=1.0,
-                 gamma=1.0,
-                 pixels_sampled=7,
-                 r2_threshold=0.995,
-                 snr_threshold=50,
-                 log_level='error',
-                 debug_suffix=None,
-                 parallel = True,
-                 njobs=-1):
-        try:
-            self.log_level = {'debug': logging.DEBUG, 'info': logging.INFO, 'warning': logging.WARNING, 'error': logging.ERROR, 'crititcal': logging.CRITICAL}[log_level]
-        except:
-            self.log_level = logging.ERROR
-        self.debug_suffix = debug_suffix
+                 window_size: int = None,
+                 stride: int = None,
+                 edge_length: int = 5,
+                 edge_distance: int = 10,
+                 contrast_params: Dict = {'channel 0': {'alpha': 1.2, 'beta': 0.3, 'gamma': 1.2}},
+                 pixels_sampled: int = None,
+                 r2_threshold: float = 0.995,
+                 snr_threshold: float = 100,
+                 get_rer: bool = True,
+                 get_fwhm: bool = True,
+                 get_mtf: bool = False,
+                 debug: bool = False,
+                 calculate_mean = False) -> None:
+
+        """
+        The implementation needs several parameters, where the best value can be quite different depending on the source
+        of the image.
+        :param window_size: If the image is large, the edge detector works better if we cut it to smaller windows. You
+        need to define the window size here. If None is set, the whole image is passed to the edge detector at once.
+        :param stride: The stride of the sliding windows. By default it is the same as the window size.
+        :param edge_length: The length of the edges we want to evaluate.
+        :param edge_distance: The minimum distance between to edges.
+        :param contrast_params: A dictionary of dictionaries containing the alpha, beta, and gamma parameters to
+        evaluate if an edge has sufficient contrast. The keys need to contain the channel number and the values are
+        dictionaries containing the parameters.
+        :param pixels_sampled: The number of pixels to be sampled on either sides of the edges. Minimum is 5. Default
+        intents to create patches with a square shape
+        :param r2_threshold: When fitting the constructed ESF with a theoretical curve, the R2 value of the fit has to
+        be above this threshold to be evaluated.
+        :param snr_threshold: The minimum value of esge SNR for an edge to be evaluated
+        :param get_rer: If True, the RER value is calculated.
+        :param get_fwhm: If True, the FWHM value is calculated.
+        :param get_mtf: If True, the MTF is calculated, and its value at the Nyquist frequency and at the half Nyquist
+        frequency is returned.
+        :param debug: If True, some debugging messages and plots are shown.
+        :param calculate_mean: If the image has multiple channels, all metrics are calculated independently for each
+        channel. Setting this parameter as True, the mean values across channels is returned for each metric as well.
+
+        """
+
         self.window_size = window_size,
         self.stride = self.window_size if stride is None else stride
         self.edge_length = edge_length
-        self.alpha = alpha
-        self.beta = beta
-        self.gamma = gamma
-        assert pixels_sampled >= 5
-        self.pixels_sampled = pixels_sampled
+        self.edge_distance = edge_distance
+        assert 'channel 0' in contrast_params.keys()
+        assert 'alpha' in contrast_params['channel 0'].keys()
+        self.contrast_params = contrast_params
+        self.pixels_sampled = int((self.edge_length+6)//2 +1) if pixels_sampled is None else pixels_sampled
+        assert self.pixels_sampled >= 5
         self.r2_threshold = r2_threshold
         self.snr_threshold = snr_threshold
+        self.get_rer = get_rer
+        self.get_fwhm = get_fwhm
+        self.get_mtf = get_mtf
+        self.debug = debug
+        self.calculate_mean = calculate_mean
         self.patch_list = []
-        self.parallel  = parallel
-        self.njobs = njobs
 
-        logging.basicConfig(format='%(levelname)s:%(message)s', level=self.log_level)
-        logging.getLogger().setLevel(self.log_level)
+        self.edge_snrs = []
 
-    def apply(self, image):
+    def apply(self, image: np.array) -> Dict:
+        """
+        The main function to execute the measurement.
+        :param image:
+        :return:
+        """
         results = {}
+        # replace 0 values with np.nan values
         image = np.where(image == 0, np.nan, image)
         # if the image has multiple channels, each channel is evaluated individually
         if len(image.shape) > 2:
-            if self.parallel:
-                r = Parallel(n_jobs=self.njobs)(delayed(self.apply_to_one_channel)(image[:, :, i]) for i in range(image.shape[2]))
-                for i, r_ in enumerate(r):
-                    results[f"channel {i}"] = r_
-            else:
-                for i in range(image.shape[2]):
-                    results[f"channel {i}"] =  self.apply_to_one_channel(image[:, :, i])
+            for i in range(image.shape[2]):
+                if f"channel {i}" in self.contrast_params.keys():
+                    alpha = self.contrast_params[f"channel {i}"]['alpha']
+                    beta = self.contrast_params[f"channel {i}"]['beta']
+                    gamma = self.contrast_params[f"channel {i}"]['gamma']
+                else:
+                    alpha = self.contrast_params[f"channel 0"]['alpha']
+                    beta = self.contrast_params[f"channel 0"]['beta']
+                    gamma = self.contrast_params[f"channel 0"]['gamma']
+                results[f"channel {i}"] =  self.apply_to_one_channel(image[:, :, i], (alpha, beta, gamma))
         else:
-            results["channel 0"] = self.apply_to_one_channel(image)
+            alpha = self.contrast_params[f"channel 0"]['alpha']
+            beta = self.contrast_params[f"channel 0"]['beta']
+            gamma = self.contrast_params[f"channel 0"]['gamma']
+            results["channel 0"] = self.apply_to_one_channel(image, (alpha, beta, gamma))
+
+        # Calculate mean values of the metrics across channels
+        if self.calculate_mean:
+            out = {}
+            for ch in results.values():
+                for metric, value in ch.items():
+                    for direction, v in value.items():
+                        k = f"{metric}_{direction}"
+                        if k in out.keys():
+                            out[k][0].append(v['mean'])
+                            out[k][1].append(v['std'])
+                        else:
+                            out[k] = [[v['mean']], [v['std']]]
+            results['mean'] = {}
+            for k,v in out.items():
+                if len(v[0])<=1:
+                    results['mean'][k] = (v[0][0], v[1][0])
+                else:
+                    v0 = np.array(v[0])
+                    v1 = np.array(v[1])
+                    results['mean'][k] = (np.nanmean(v0), max(np.sqrt(np.sum(v1[~np.isnan(v1)] ** 2))/ len(v1[~np.isnan(v1)]), np.nanstd(v1)))
         return results
 
-    def apply_to_one_channel(self, image, r2_threshold=0.995, snr_threshold=50):
-        out = {'rer': {}, 'fwhm': {}, 'mtf': {}}
-        rers = {'vertical': np.array([]), 'horizontal': np.array([]), 'other': np.array([])}
-        fwhms = {'vertical': np.array([]), 'horizontal': np.array([]), 'other': np.array([])}
-        mtfs_nyq = {'vertical': np.array([]), 'horizontal': np.array([]), 'other': np.array([])}
-        mtfs_half_nyq = {'vertical': np.array([]), 'horizontal': np.array([]), 'other': np.array([])}
-        lines = np.empty(shape=[0, 4])
+    def apply_to_one_channel(self,
+                             image: np.array,
+                             patch_params: Tuple) -> Dict:
+        """
+        Runs the measurement one image channel at the the time.
+        The following steps are executed:
+        1. Find straight lines in the image with the required length
+        2. Sort the lines by their angle
+        3. Cut patches around the lines, and check if they have sufficient contrast
+        4. Calculate the ESFs
+        5. Calculate the required metrics.
+        :param image:
+        :param patch_params:
+        :return:
+        """
+        assert len(image.shape)<3
+
+        output = {}
+        if self.get_rer:
+            output['RER'] = {}
+
+        if self.get_fwhm:
+            output['FWHM'] = {}
+
+        if self.get_mtf:
+            output['MTF_NYQ'] = {}
+            output['MTF_halfNYQ'] = {}
+
         final_good_lines = {}
 
-        for i in range(0, image.shape[0], self.stride[0]):
-            for j in range(0, image.shape[1], self.stride[0]):
-                image_window = image[i:min(i+self.window_size[0], image.shape[0]), j:min(j+self.window_size[0], image.shape[1])]
-                if np.isnan(image_window).sum()>=0.8*image_window.shape[0]*image_window.shape[1]:
-                    #print(np.isnan(image_window).sum())
-                    continue
-                lines_ = self.edge_detector(image_window, min_line_length=self.edge_length)
-                if lines_ is None:
-                    continue
-                lines_[:,0::2] += j
-                lines_[:,1::2] += i
-                lines = np.concatenate([lines, lines_], axis=0)
+        # Find straight lines in the image
+        lines = self.get_lines(image)
 
-        t1 = time.time()
+        # Sort lines by angles
         vertical, horizontal, other = self.sort_angles(lines)
-        logging.debug(f"sort angles {time.time() - t1}")
-        t1 = time.time()
+
+        # Find patches that are in agreement with the contrast parameters
         vertical_patches, horizontal_patches, other_patches, good_lines = self.find_good_patches(image, vertical,
-                                                                                                 horizontal, other)
-        logging.debug(f"find good patches {time.time() - t1}")
-
-
+                                                                                                 horizontal, other,
+                                                                                                 patch_params)
+        # Rotate horizontal patches
         horizontal_patches = [np.rot90(p) for p in horizontal_patches]
-        for i, (patches, kind) in enumerate(zip([vertical_patches, horizontal_patches, other_patches], ['vertical', 'horizontal', 'other'])):
 
-            logging.debug("---------")
-            logging.debug(kind)
-            t1 = time.time()
-            edge_list, final_good_lines[kind] = self.get_edge_list(patches, good_lines[i])
-            logging.debug(len(edge_list))
-            t2 = time.time()
-            logging.debug(f"get edge list {len(patches)} {kind} {t2-t1}")
+        for i, (patches, kind, k) in enumerate(zip([vertical_patches, horizontal_patches, other_patches],
+                                                ['vertical', 'horizontal', 'other'], ['X', 'Y', 'other'])):
 
-            rer = self.calculate_rer(edge_list)
+            self.edge_snrs.append([])
+            # Create edge_list
+            edge_list = self.get_edge_list(patches)
+            # Calculate RER
+            if self.get_rer:
+                rer = self.calculate_rer(edge_list)
 
-            if rer is not None:
-                rers[kind] = np.concatenate([rers[kind], rer])
+                if rer is not None:
+                    output['RER'][k] = {'mean': np.mean(rer),
+                                        'std': np.std(rer),
+                                        'length': np.size(rer),
+                                        'median': np.median(rer),
+                                        'IQR': np.subtract(*np.percentile(rer, [75, 25]))}
 
-            fwhm = self.calculate_fwhm(edge_list)
-            if fwhm is not None:
-                fwhms[kind] = np.concatenate([fwhms[kind], fwhm])
-            mtf = self.calculate_mtf(edge_list)
-            if mtf is not None:
-                mtfs_nyq[kind] = np.concatenate([mtfs_nyq[kind], mtf[0]])
-                mtfs_half_nyq[kind] = np.concatenate([mtfs_half_nyq[kind], mtf[1]])
-        for kind in ['vertical', 'horizontal', 'other']:
-            out['rer'][kind] = (np.mean(rers[kind]), np.std(rers[kind]), np.size(rers[kind]))
-            out['fwhm'][kind] = (np.mean(fwhms[kind]), np.std(fwhms[kind]), np.size(fwhms[kind]))
-            out['mtf'][kind] = {'nyq': (np.mean(mtfs_nyq[kind]), np.std(mtfs_nyq[kind]), np.size(mtfs_nyq[kind])),
-                                'half_nyq': (np.mean(mtfs_half_nyq[kind]), np.std(mtfs_half_nyq[kind]), np.size(mtfs_half_nyq[kind]))}
-        if self.log_level==logging.INFO or self.log_level==logging.DEBUG:
-            self._plot_good_patches(image, vertical_patches, horizontal_patches, other_patches, lines, good_lines, final_good_lines)
-        return out
+            # Calculate FWHM
+            if self.get_fwhm:
+                fwhm = self.calculate_fwhm(edge_list)
 
-    def edge_detector(self, image, threshold=15, min_line_length=5, line_gap=0):
+                if fwhm is not None:
+                    output['FWHM'][k] = {'mean': np.mean(fwhm),
+                                        'std': np.std(fwhm),
+                                        'length': np.size(fwhm),
+                                        'median': np.median(fwhm),
+                                        'IQR': np.subtract(*np.percentile(fwhm, [75, 25]))}
+            # Calculate MTF
+            if self.get_mtf:
+                mtf = self.calculate_mtf(edge_list)
+                if mtf is not None:
+                    output['MTF_NYQ'][k] = {'mean': np.mean(mtf[0]),
+                                                'std': np.std(mtf[0]),
+                                                'length': np.size(mtf[0]),
+                                                'median': np.median(mtf[0]),
+                                                'IQR': np.subtract(*np.percentile(mtf[0], [75, 25]))}
+                    output['MTF_halfNYQ'][k] = {'mean': np.mean(mtf[1]),
+                                                    'std': np.std(mtf[1]),
+                                                    'length': np.size(mtf[1]),
+                                                    'median': np.median(mtf[1]),
+                                                    'IQR': np.subtract(*np.percentile(mtf[1], [75, 25]))}
+
+
+        # if self.debug:
+        #     self._plot_good_patches(image, vertical_patches, horizontal_patches, other_patches, lines, good_lines)
+        return output
+
+    def get_lines(self, image: np.array) -> np.array:
+        """
+        Find suitable line in the image.
+        Uses sliding windows to go through the images, and in each window calls the edge_detector function
+        :param image: numpy array, only one channel
+        :return: an array containing the detected lines
+        """
+
+        lines = np.empty(shape=[0, 4])
+
+        # Uses sliding windows, because the Hough transform works better for smaller images, instead of
+        # huge satellite images
+        im_height, im_width = image.shape
+        if self.window_size[0] is None:
+            lines = self.edge_detector(image)
+        else:
+            for i in range(0, im_height, self.stride[0]):
+                for j in range(0, im_width, self.stride[0]):
+                    image_window = image[i:min(i+self.window_size[0], image.shape[0]), j:min(j+self.window_size[0], image.shape[1])]
+                    # if the window mostly contain np.nan values, don't run the edge detector
+                    if np.isnan(image_window).sum()>=0.8*image_window.shape[0]*image_window.shape[1]:
+                        continue
+
+                    lines_ = self.edge_detector(image_window)
+                    if lines_ is None or len(lines_) == 0:
+                        continue
+                    # Correct the line coordinates to correspond to the coordinates of the whole image instead of the window.
+
+                    lines_[:,0::2] += j
+                    lines_[:,1::2] += i
+                    lines = np.concatenate([lines, lines_], axis=0)
+        return lines
+
+    def edge_detector(self, image: np.array, threshold: int=15, line_gap: int=0) -> np.array:
         """
         Runs the canny edge detector to find edges, then uses the Hough transform to find straight lines with the
         given parameters.
@@ -160,41 +282,49 @@ class RERMetric:
             threshold:
             min_line_length: the minimum length of the line in pixels
             line_gap: the line gap
+        Return:
+            numpy array with the line coordinates
         """
-        canny = feature.canny(image, sigma=1, low_threshold=np.nanquantile(image, 0.99) * 0.1,
-                              high_threshold=np.nanquantile(image, 0.99) * 0.25)
+        canny = feature.canny(image, sigma=1, low_threshold = np.nanquantile(image, 0.99) * 0.1,
+                              high_threshold = np.nanquantile(image, 0.99) * 0.25)
         # List of lines identified, lines in format ((x0, y0), (x1, y1)), indicating line start and end
-        lines = probabilistic_hough_line(canny, threshold=threshold,
-                                         line_length=min_line_length,
-                                         line_gap=line_gap, seed=42, theta=np.linspace(-np.pi / 2, np.pi / 2, 360*1, endpoint=False))
-        # reformatting to list of lists
-        lines = [[p1[0], p1[1], p2[0], p2[1]] for p1, p2 in lines]
-        lines = np.array(lines)
-        if lines.shape[0] == 0:
+        lines = probabilistic_hough_line(canny,
+                                         threshold=threshold,
+                                         line_length=self.edge_length,
+                                         line_gap=line_gap,
+                                         seed=42,
+                                         theta=np.linspace(-np.pi / 2, np.pi / 2, 360*1, endpoint=False))
+
+        if len(lines) == 0:
             return None
-       # return lines
-        lens = np.linalg.norm([(lines[:, 0] - lines[:, 2]), (lines[:, 1] - lines[:, 3])], axis=0)
-        lines_g = lines[lens == min_line_length]
-        lines_ = lines[lens >  min_line_length]
-        lens = lens[lens >  min_line_length]
-        l = lens
-        while True:
+        # Cuts the lines to segments with lengths of self.edge_length
+        lines_ = self._sort_lines(lines)
+        # Format: [x0, y0, x1, y1]
+        return lines_
 
-            v = np.array([(lines_[:, 2] - lines_[:, 0]), (lines_[:, 3] - lines_[:, 1])])
-            vv = v / lens *  min_line_length
-            new_p = (np.sign(vv) * np.ceil(np.abs(vv))).T + lines_[:, :2]
-            lines_g1 = np.concatenate([lines_[:, :2], new_p], axis=1)
-            lines_ = np.concatenate([new_p, lines_[:, 2:]], axis=1)
-            lens = np.linalg.norm([(lines_[:, 0] - lines_[:, 2]), (lines_[:, 1] - lines_[:, 3])], axis=0)
-            lines_g = np.concatenate([lines_g, lines_g1, lines_[(lens ==  min_line_length)]], axis=0)
-          #  print(lines_g.shape)
-            lines_ = lines_[lens >  min_line_length]
-            lens = lens[lens >  min_line_length]
-            if lines_.shape[0] == 0:
-                break
-        return lines_g
+    def _sort_lines(self, lines: list) -> np.array:
+        """
+        Given the list of lines found by the edge detectors, it checks the lengths of the lines, and cuts them up to
+        segments with a length of the self.edge_length.
+        :param lines:
+        :return:
+        """
+        good_lines = []
 
-    def sort_angles(self, lines):
+        lines_ = [LineString(list(l)) for l in lines]
+        for line in lines_:
+            for j in range(self.edge_length):
+                splitter = MultiPoint([line.interpolate(j + (self.edge_length * i)) for i in range(int(line.length // self.edge_length + 1))])
+                cuts = snap(line, splitter, 1e-5)
+                for i in range(1, len(cuts.coords)):
+                    x0, y0 = round(cuts.coords.xy[0][i - 1]), round(cuts.coords.xy[1][i - 1])
+                    x1, y1 = round(cuts.coords.xy[0][i]), round(cuts.coords.xy[1][i])
+                    ll = LineString([(x0,y0),(x1, y1)])
+                    if ll.length >= self.edge_length-1e-5:
+                        good_lines.append([x0, y0, x1, y1])
+        return np.array(good_lines)
+
+    def sort_angles(self, lines: np.array) -> Tuple:
         """
         Calculates the angle of the each of the lines relative to vertical.
         Sorts the lines into two groups:
@@ -204,17 +334,18 @@ class RERMetric:
         Args:
             lines: list of lines
         Returns:
-            3 list of lines, each with [x1,x2,y1,y2,theta]
+            tuple of 3 list of lines, each with [x0,x1,y0,y1,theta]
         """
         horizontal = []
         vertical = []
         other = []
 
         for l in lines:
-            y1, x1, y2, x2 = l
-            theta = np.rad2deg(np.arctan2(y2 - y1, x2 - x1)) % 180
+            x0, y0, x1, y1 = l
+            # theta is relative to the vertical, y direction
+            theta = np.rad2deg(np.arctan2(x1 - x0, y1 - y0)) % 180
 
-            coords = np.array([x1, x2, y1, y2, theta])
+            coords = np.array([x0, x1, y0, y1, theta])
 
             if (15 >= theta) or (180 - 15 <= theta):
                 vertical.append(coords)
@@ -222,23 +353,38 @@ class RERMetric:
                 horizontal.append(coords)
             else:
                 other.append(coords)
-        return vertical, horizontal, other
+        return (vertical, horizontal, other)
 
-    def find_good_patches(self, image, vertical, horizontal, other):
+    def find_good_patches(self, image: np.array, vertical: List, horizontal: List, other: List, params: Tuple) -> Tuple:
+        """
+        Takes the line lists, for each line cuts a patch around the line. Then it checks if the patch complies with the
+        contrast conditions defined by the parameters. If it complies, it adds the patch to the patch list.
+        :param image:
+        :param vertical: vertical line list
+        :param horizontal: horizontal line list
+        :param other: other line list
+        :param params: contrast condition parameters
+        :return: a Tuple with the patch lists in each directions, and a list of the good lines
+        """
 
+        alpha, beta, gamma = params
         vertical_patches = []
         horizontal_patches = []
         other_patches = []
         good_lines = []
-        good_lines_vertical = []
-        good_lines_horizontal = []
-        good_lines_other = []
-        for lines, kind in zip([vertical, horizontal, other], ['v', 'h', 'o']):
-            for i, l in enumerate(lines):
-                x1, x2, y1, y2, theta = l
 
-                x1, x2 = int(min(x1, x2)), int(max(x1, x2))
-                y1, y2 = int(min(y1, y2)), int(max(y1, y2))
+        np.random.shuffle(vertical)
+        np.random.shuffle(horizontal)
+        np.random.shuffle(other)
+
+        for lines, kind in zip([vertical, horizontal, other], ['v', 'h', 'o']):
+            masked_image = image.copy()
+            for i, l in enumerate(lines):
+                # adapt to array indexing
+                y1_, y2_, x1_, x2_, theta = l
+
+                x1, x2 = int(min(x1_, x2_)), int(max(x1_, x2_))
+                y1, y2 = int(min(y1_, y2_)), int(max(y1_, y2_))
 
                 # make sure the line is not too close to the image edge
                 if x1 < 2*self.pixels_sampled or \
@@ -249,27 +395,33 @@ class RERMetric:
 
                 if kind == 'v':
                     # for vertical lines the patch size is (line length + 6, 2*self.pixels_sampled)
-                    patch = image[x1 - 3:x1 + self.edge_length + 4, y1 - self.pixels_sampled:y1  + self.pixels_sampled+1]
+                    patch = masked_image[x1 - 3:x1 + self.edge_length + 3, y1 - self.pixels_sampled:y1  + self.pixels_sampled+1].copy()
+
                     # sample the dark and bright sides of the edge
-                    DN1 = patch[3:-3, :self.pixels_sampled - 3]
-                    DN2 = patch[3:-3, -(self.pixels_sampled - 3):]
+                    DN1 = patch[3:-3, :self.pixels_sampled - 1]
+                    DN2 = patch[3:-3, -(self.pixels_sampled - 1):]
 
                 elif kind == 'h':
                     # for horizontal lines the patch size is (2*self.pixels_sampled, line length + 6)
-                    patch = image[x1 - self.pixels_sampled:x1  + self.pixels_sampled+1, y1 - 3:y1 + self.edge_length + 4]
+                    patch = masked_image[x1 - self.pixels_sampled:x1  + self.pixels_sampled+1, y1 - 3:y1 + self.edge_length + 4].copy()
                     # sample the dark and bright sides of the edge
-                    DN1 = patch[:self.pixels_sampled - 3, 3:-3]
-                    DN2 = patch[-(self.pixels_sampled - 3):, 3:-3]
+                    DN1 = patch[:self.pixels_sampled - 1, 3:-3]
+                    DN2 = patch[-(self.pixels_sampled - 1):, 3:-3]
                 else:
                     # for other angles, first a patch of (4*self.pixels_sampled, 4*self.pixels_sampled) is cut
                     # than the patch is rotated by the angle of theta to make it vertical
-                    p = image[x1 - 2 * self.pixels_sampled:x2 + 2 * self.pixels_sampled+1, y1 - 2 * self.pixels_sampled:y2 + 2 * self.pixels_sampled+1]
+                    p = masked_image[x1 - 2 * self.pixels_sampled:x2 + 2 * self.pixels_sampled+1, y1 - 2 * self.pixels_sampled:y2 + 2 * self.pixels_sampled+1].copy()
                     p_rot = ndimage.rotate(p, -theta)
                     _norm = np.linalg.norm([x2 - x1, y2 - y1])
                     patch = p_rot[p_rot.shape[0] // 2 - int(_norm/2) - 3:p_rot.shape[0] // 2 + int(_norm/2) + 4,
                             p_rot.shape[1] // 2 - self.pixels_sampled:p_rot.shape[1] // 2 + self.pixels_sampled+1]
-                    DN1 = patch[3:-3, :self.pixels_sampled - 3]
-                    DN2 = patch[3:-3, -(self.pixels_sampled - 3):]
+
+                    DN1 = patch[3:-3, :self.pixels_sampled - 1]
+                    DN2 = patch[3:-3, -(self.pixels_sampled - 1):]
+
+                # print(np.isnan(patch).any())
+                if np.isnan(patch).any():
+                    continue
 
                 if DN1.shape[0] == 0 or DN2.shape[0] == 0 or np.isnan(DN1).sum()>0 or  np.isnan(DN2).sum()>1:
                     continue
@@ -282,220 +434,80 @@ class RERMetric:
                     DNd = DN1
 
 
+                # Check if patch complies contrast conditions
+                if np.mean(DNb) / np.mean(DNd) > alpha and \
+                        np.std(DNb) / np.std(patch) < beta and \
+                        np.std(DNd) / np.std(patch) < beta and \
+                        np.quantile(DNb, 0.1) / np.quantile(DNd, 0.9) > gamma:
 
-                if np.mean(DNb) / np.mean(DNd) > self.alpha and np.std(DNb) / np.std(patch) < self.beta and np.std(DNd) / np.std(patch) < self.beta and np.quantile(DNb, 0.1) / np.quantile(DNd, 0.9) > self.gamma:
-                    x1, x2, y1, y2, theta = l
+                    # set nearby pixel values to nan in order to sample edges too close to each other
+                    d = self.edge_distance // 2
+                    masked_image[x1 - d:x2 + d, y1 - d:y2 + d] = np.nan
+
+
                     if kind == 'v':
                         vertical_patches.append(patch)
-                        good_lines_vertical.append((x1, x2, y1, y2, theta))
+
                     elif kind == 'h':
                         horizontal_patches.append(patch)
-                        good_lines_horizontal.append((x1, x2, y1, y2, theta))
+
                     else:
                         other_patches.append(patch)
-                        good_lines_other.append((x1, x2, y1, y2, theta))
 
-                    good_lines.append((x1, x2, y1, y2, theta))
+                    good_lines.append(l)
+        return (vertical_patches, horizontal_patches, other_patches, good_lines)
 
-        return vertical_patches, horizontal_patches, other_patches, (good_lines_vertical, good_lines_horizontal, good_lines_other, good_lines)
-
-    def _plot_good_patches(self, image, v_patches, h_patches, o_patches, lines, good_lines, final_good_lines):
-        fig, ax = plt.subplots(figsize=(image.shape[0] // 20, image.shape[1] // 20))
+    def _plot_good_patches(self, image, v_patches, h_patches, o_patches, lines, good_lines):
+        fig, ax = plt.subplots(figsize=(100,100))
         ax.imshow(image)
+        print(f"good: {len(good_lines[-1])}")
         for l in lines:
             x1, y1, x2, y2 = l
-            ax.plot([x1, x2], [y1, y2], color='black', linewidth=5)
-        for l in good_lines[-1]:
+            ax.plot([x1, x2], [y1, y2], color='black', linewidth=2)
+        for l in good_lines:
             x1, x2, y1, y2, _ = l
-            ax.plot([y1, y2], [x1, x2], color='red', linewidth=3)
-        for k,v in final_good_lines.items():
-            for l in v:
-                x1, x2, y1, y2, _ = l
-                ax.plot([y1, y2], [x1, x2], color='green', linewidth=3)
+            ax.plot([x1, x2], [y1, y2], color='red', linewidth=2)
+
         fn = "good_lines.png"
-        if self.debug_suffix:
-            fn = fn.split('.')[0] + self.debug_suffix + '.png'
         fig.savefig(os.path.join(DEBUG_DIR, fn))
-        # plt.show()
         plt.clf()
 
-        # tot = len(v_patches)
-        # cols = 5
-        # rows = tot // cols
-        # rows += tot % cols
-        # position = range(1, tot + 1)
-        # fig = plt.figure(1, figsize=(2000,2000))
-        # for j in range(tot):
-        #     ax = fig.add_subplot(rows, cols, position[j])
-        #     ax.imshow(v_patches[j])
-        # fn = "vertical_edges.png"
-        # if self.debug_suffix:
-        #     fn = fn.split('.')[0] + self.debug_suffix + 'png'
-        # fig.savefig(os.path.join(DEBUG_DIR, fn), bbox_inches='tight',dpi=100)
-        # plt.show()
-        # plt.clf()
-        #
-        # tot = len(h_patches)
-        # cols = 5
-        # rows = tot // cols
-        # rows += tot % cols
-        # position = range(1, tot + 1)
-        # fig = plt.figure(1, figsize=(2000,2000))
-        # for j in range(tot):
-        #     ax = fig.add_subplot(rows, cols, position[j])
-        #     ax.imshow(h_patches[j])
-        # fn = 'horizontal_edges.png'
-        # if self.debug_suffix:
-        #     fn = fn.split('.')[0] + self.debug_suffix + 'png'
-        # fig.savefig(os.path.join(DEBUG_DIR, fn), bbox_inches='tight',dpi=100)
-        # plt.show()
-        # plt.clf()
-        #
-        # tot = len(o_patches)
-        # cols = 5
-        # rows = tot // cols
-        # rows += tot % cols
-        # position = range(1, tot + 1)
-        # fig = plt.figure(1, figsize=(200,200))
-        # for j in range(tot):
-        #     ax = fig.add_subplot(rows, cols, position[j])
-        #     ax.imshow(o_patches[j])
-        # fn = 'other_edges.png'
-        # if self.debug_suffix:
-        #     fn = fn.split('.')[0] + self.debug_suffix + 'png'
-        # fig.savefig(os.path.join(DEBUG_DIR, fn))
-        # plt.show()
-        # plt.clf()
-
-    def get_edge_list(self, patch_list, lines):
+    def get_edge_list(self, patch_list: List) -> List:
+        """
+        Create a list of the good edges using the provided patch list
+        :param patch_list:
+        :param lines:
+        :return:
+        """
         edge_list = []
-        if self.parallel:
-            edge_list = Parallel(n_jobs=self.njobs)(delayed(self._get_edge)(patch) for patch in patch_list)
 
-        else:
-            for patch in patch_list:
-                _esf = self._get_edge(patch)
+        for patch in patch_list:
+            _esf = self._get_edge(patch)
+            if _esf is not None:
                 edge_list.append(_esf)
 
-        return [x for x in edge_list if x is not None], [y for x,y in zip(edge_list, lines) if x is not None]
+        return edge_list
 
-    def _get_edge(self, patch):
+    def _get_edge(self, patch: np.array) -> np.array:
+        """
+        Return the ESF extracted from the provided patch, if possible.
+        :param patch:
+        :return:
+        """
+        # Calculate the edge locations
         edge_coeffs = self.fit_subpixel_edge(patch)
+        # Calculate the ESF
         _esf = self.compute_esf(patch, edge_coeffs)
         if _esf is not None:
-            if self.log_level==logging.DEBUG:
-                self.patch_list.append(patch)
+            self.patch_list.append(patch)
             return _esf
 
-
-    def calculate_rer(self, edge_list):
-        rers = []
-        x = np.arange(-4, 4, 0.1)
-        for edge in edge_list:
-            x, esf, esf_popt, lsf, lsf_popt, esf_norm, esf_norm_popt = edge
-            loc_50perc = x[np.argmin(np.abs(f(x, *esf_norm_popt) - 0.5))]
-            rer = f(loc_50perc+0.5, *esf_norm_popt) - f(loc_50perc-0.5, *esf_norm_popt)
-            rers.append(rer)
-           # print(rer)
-        if len(rers) < 1:
-            return None
-        logging.info(f"RERS: {rers}")
-        logging.info(f"{np.mean(rers), np.std(rers), np.median(rers), np.min(rers), np.max(rers), len(rers)}")
-        return np.array(rers)
-        # return np.mean(rers), np.std(rers), np.median(rers), len(rers), np.quantile(rers, 0), np.quantile(rers, 0.1), np.quantile(rers, 0.9), np.quantile(rers, 1.)
-
-    def calculate_fwhm(self, edge_list):
-        fwhms = []
-        for edge in edge_list:
-            x, esf, esf_popt, lsf, lsf_popt, esf_norm, esf_norm_popt = edge
-            lsf = self._smooth_lsf(x, lsf)
-
-            try:
-                spline = UnivariateSpline(np.arange(lsf.shape[0]), lsf - np.max(lsf) / 2, s=0)
-                r1, r2 = spline.roots()
-                fwhm = np.max([r1, r2]) - np.min([r1, r2])
-
-                fwhms.append(fwhm/10)
-               # print(fwhm/10)
-            except:
-                pass
-        if len(fwhms)<1:
-            return None
-        logging.info(f"FWHMs: {fwhms}")
-        logging.info(f"{np.mean(fwhms), np.std(fwhms), np.median(fwhms), np.min(fwhms), np.max(fwhms), len(fwhms)}")
-        return np.array(fwhms)
-        #return np.mean(fwhms), np.std(fwhms), np.median(fwhms), len(fwhms)
-
-    def _smooth_lsf(self, x, lsf):
-        gy = ndimage.gaussian_filter(lsf, 8, mode='wrap')
-        sz = len(lsf)
-        #print(sz)
-        # detect discontinuity and remove 1/3
-        mx = np.argmax(gy)  # it was mx = np.argmax(y)
-        mask = np.zeros(sz)
-
-        mask[max(0, int(mx - 11)):min(sz - 1, int(mx +11))] = 1
-
-        #print(mask)
-        mask = ndimage.gaussian_filter(mask, 3)
-        lsf_s = mask * lsf + (1 - mask) * gy
-       # lsf_ss = lsf_s * np.hanning(len(lsf_s))
-        return lsf_s
-
-    def calculate_mtf(self, edge_list):
-        mtf_nyq = []
-        mtf_half_nyq = []
-        for edge in edge_list:
-            x, esf, esf_popt, lsf, lsf_popt, esf_norm, esf_norm_popt = edge
-            lsf_s = self._smooth_lsf(x, lsf)
-
-            try:
-                N = lsf.shape[0]
-                T = 0.1
-                yf = fft(lsf_s)
-                xf = fftfreq(N, T)[:N // 2]
-                mtf = 2.0 / N * np.abs(yf[0:N // 2]) # ????
-                mtf = mtf/mtf[0]
-                idx = np.argwhere(xf < 1.5).flatten()
-                p = interp1d(xf[idx], mtf[idx], kind='cubic')
-                mtf_nyq.append(p(0.5))
-                mtf_half_nyq.append(p(0.25))
-
-
-                if self.log_level == logging.INFO:
-                    fig, ax = plt.subplots()
-                    ax.scatter(x, esf)
-                    plt.show()
-                    plt.clf()
-                    fig, ax = plt.subplots()
-                    ax.scatter(x, lsf)
-                    ax.scatter(x, lsf_s, c='r')
-                    ax.scatter(x, lsf_ss, c='g')
-                    plt.show()
-                    plt.clf()
-                    #print(f"MTF no smoothing {p1(0.5), p1(0.25)}, smoothing {p(0.5), p(0.25)}, hanning {p2(0.5), p2(0.25)}")
-                    fig, ax = plt.subplots()
-                    ax.scatter(xf[idx], mtf[idx])
-                    ax.plot(xf[idx], p(xf[idx]), ls='-')
-                    ax.plot(xf[idx], p2(xf[idx]), ls='-', c='g')
-
-                    plt.show()
-                    plt.clf()
-
-               # print(mtf[3])
-            except:
-                pass
-        if len(mtf_nyq)<1:
-            return None
-        logging.info(f"MTF NYQ:  {mtf_nyq}")
-        logging.info(f"{np.mean(mtf_nyq), np.std(mtf_nyq), np.median(mtf_nyq), np.min(mtf_nyq), np.max(mtf_nyq), len(mtf_nyq)}")
-        logging.info(f"MTF half NYQ: {mtf_half_nyq}")
-        logging.info(f"{np.mean(mtf_half_nyq), np.std(mtf_half_nyq), np.median(mtf_half_nyq), np.min(mtf_half_nyq), np.max(mtf_half_nyq), len(mtf_half_nyq)}")
-        return np.array(mtf_nyq), np.array(mtf_half_nyq)
-        #return np.mean(mtf_nyq), np.std(mtf_nyq), np.median(mtf_nyq), len(mtf_nyq)
-
-
-    def fit_subpixel_edge(self, patch):
+    def fit_subpixel_edge(self, patch: np.array) -> Any:
+        """
+        Calculates the exact edge location with a subpixel precison.
+        :param patch:
+        :return:
+        """
         points = []
         # fit a cubic polynomial for each row
         # calculate the second derivative of the polynomial
@@ -512,86 +524,119 @@ class RERMetric:
         edge_coeffs = np.poly1d(np.polyfit(list(range(len(points))), points, 1))
         return edge_coeffs
 
-    def compute_esf(self, patch, edge_coeffs):
+    def compute_esf(self,
+                    patch: np.array,
+                    edge_coeffs):
+        """
+        Constructs the ESF, the normalized ESF, and the LSF, checks their quality, and fits the theoretical functions.
+        :param patch:
+        :param edge_coeffs:
+        :return:
+        """
+        # Check if edge is in the correct list
+        if abs(90-np.rad2deg(np.arctan(edge_coeffs[0]))) > 15:
+            return None
         patch_h, patch_w = patch.shape
-        x = np.arange(-patch_w // 2 + 1, patch_w // 2 - 1, 0.1)
+
+        # Pixel coordinates for the ESF
+        x = np.arange(-patch_w // 2 + 1, patch_w // 2, 0.1)
+
+        # pixel coordinates X direction
         x1 = np.arange(0, patch_w)
+        # pixel coordinates Y direction
         x2 = np.arange(3, patch_h - 3, 0.5)
+
+        # Placeholder for the transects
         edges = np.zeros((x2.shape[0], x.shape[0]))
+
+        # Calculate the Y coordinates of each the sampling points of each of the transects
         transect_fit = np.array(
             [np.polynomial.Polynomial([k - (-edge_coeffs[1] * edge_coeffs[0]), -edge_coeffs[1]])(x1) for k in x2])
+
+        # Calculate the vectors pointing from the intersection of the edge and the transect to the sampling point
         m = np.array(np.meshgrid(edge_coeffs(x2), x1)).T
         v0 = m[..., 1] - m[..., 0]
         v1 = transect_fit - x2[:, None]
         v = np.array([v0, v1])
+
+        # Calculate the distance between the sampling point and the edge
         d = v[0] / np.abs(v[0]) * np.linalg.norm(v, axis=0)
+        # Make sure that the sampling point coordinates are in the patch
         m = np.sum(np.round(transect_fit).astype(int) <= 0, axis=1) + np.sum(
             np.round(transect_fit).astype(int) >= patch_h, axis=1)
         m = m==0
         d = d[m]
+        # For each transect, calculate the pixel coordinates of the sampling points, record their value and their
+        # distance from the edge. Then fit a cubic spline function to the points.
         if not d.shape[0] == 0:
             idx = np.array([np.round(transect_fit[m]).astype(int), np.vstack([x1] * x2.shape[0])[m]])
-
-            val = patch[idx[0], idx[1]]
+            # find the pixel value at the sampling point
+            val = patch[idx[0], idx[1]].copy()
 
             if val.shape[0] > 0:
                 val = np.take_along_axis(val, np.argsort(d, axis=1), axis=1)
                 dists = np.take_along_axis(d, np.argsort(d, axis=1), axis=1)
+                # for each transect fit a cubic spline on the sampled points, and resample the fit
                 for l, (d, v) in enumerate(zip(dists, val)):
                     c = CubicSpline(d, v)
                     edges[l] = c(x)
 
-
+        # Make sure there are no invalid edges before calculating the mean
         edges = edges[~np.all(edges == 0, axis=1)]
+        # Make sure there are enough valid transects
         if edges.shape[0]<5:
             return None
+        #Calculate the mean ESF
         esf = np.mean(edges, axis=0)
-        if self.log_level==logging.DEBUG:
-            print("------------ esf -----------")
-            fig, ax = plt.subplots()
-            ax.scatter(x, esf)
-            plt.show()
-            plt.clf()
+
+        # Shift the esf so the edge is in the middle
         idx = np.argwhere((-3 <= x) & (x <= 3)).flatten()
         x_ = x[idx]
         esf_ = esf[idx]
         shift = x_.shape[0] // 2 - np.argmax(np.abs(esf_ - np.roll(esf_, 1))[1:])
-       # print(shift)
         esf = np.roll(esf, shift)
-        if self.log_level==logging.DEBUG:
-            fig, ax = plt.subplots()
-            ax.scatter(x, esf)
-            plt.show()
-            plt.clf()
+
+        # calculate the LSF
         lsf = np.abs((esf - np.roll(esf, 1))[1:])
-        #lsf = np.gradient(esf)[1:]
         shift = abs(shift)
         if shift >0:
-            x_ = x[shift+1:-shift]
-            lsf_ = lsf[shift: -shift]
+            x_ = x[shift+1:-shift].copy()
+            lsf_ = lsf[shift: -shift].copy()
         else:
-            x_ = x[1:]
-            lsf_ = lsf
-        # fig, ax = plt.subplots()
-        # ax.scatter(x_, lsf_)
-        # plt.show()
-        # plt.clf()
-        lsf_popt = self._fit_function(gaus, x_, lsf_, p0=[50, 0, 1])
-        if lsf_popt is not None:
-            lim = round((abs(lsf_popt[1]) + lsf_popt[-1]*3) * 2)/2 + 0.5
-        else:
-            lim = x[-1]
-        if lim <= 0:
-            lim = x[-1]
-        idx = np.argwhere((-lim <= x) & (x <= lim)).flatten()
-        x = x[idx[1:]]
-        esf = esf[idx[1:]]
-        lsf = lsf[idx[:-1]]
+            x_ = x[1:].copy()
+            lsf_ = lsf.copy()
+        # Fit a Gaussian to the LSF
+        lsf_popt = self._fit_function(gaussian, x_, lsf_, p0=[50, 0, 1])
 
-        lsf_popt = self._fit_function(gaus, x, lsf, p0=[50, 0, 1])
-        esf_norm, v_min, v_max, esf_popt, esf_norm_popt = self.normalize_esf(esf, x)
-        if self.evaluate_esf(lsf_popt, esf_norm_popt, esf, esf_norm, v_min, v_max, x):
-            return [x, esf, esf_popt, lsf, lsf_popt, esf_norm, esf_norm_popt]
+        # Trim the wings of the ESF at +- 3 sigma of the fitted Gaussian
+        if lsf_popt is not None:
+            lim1 = round((abs(lsf_popt[1]) + lsf_popt[-1]*3) * 2)/2 + 0.5
+            lim2 = round((abs(lsf_popt[1]) + lsf_popt[-1]*5) * 2)/2 + 0.5
+        else:
+            lim1 = x[-1]
+            lim2 = x[-1]
+        if lim1 <= 0:
+            lim1 = x[-1]
+        idx1 = np.argwhere((-lim1 <= x) & (x <= lim1)).flatten()
+        idx2 = np.argwhere((-lim2 <= x) & (x <= lim2)).flatten()
+        if lim2>=x[-shift]:
+            idx2 = idx2[shift:-shift]
+        x_esf = x[idx1[1:]].copy()
+        esf = esf[idx1[1:]].copy()
+        x_lsf = x[idx2[1:]].copy()
+        lsf = lsf[idx2[:-1]].copy()
+
+        # Fit a Gaussian to the trimmed LSF
+        lsf_popt = self._fit_function(gaussian, x_lsf, lsf, p0=[50, 0, 1])
+        # Normalize the ESF
+        esf_norm, v_min, v_max, esf_popt, esf_norm_popt = self.normalize_esf(esf, x_esf)
+        # Evaluate the ESF
+        if self.evaluate_esf(lsf_popt, esf_norm_popt, esf_norm, x_esf):
+            # Return the all the values that were calculated for the edge
+            # return [x_esf,x_lsf, esf, esf_popt, lsf, lsf_popt, esf_norm, esf_norm_popt]
+            final_esf = model_esf(x_esf, *esf_popt)
+            final_lsf = np.abs(np.diff(final_esf))
+            return [x_esf, final_esf, final_lsf, esf_norm_popt]
         else:
             return None
 
@@ -604,89 +649,289 @@ class RERMetric:
             return None
         return popt
 
-    def normalize_esf(self, esf, x):
+    def normalize_esf(self, esf: np.array, x: np.array) -> Tuple:
+        """
+        Normalizes the ESF.
+        :param esf:
+        :param x:
+        :return:
+        """
+        # Calculate initial values for curve fitting
         a0 = np.median(esf)
         d0 = np.quantile(esf, 0.05)
-        esf_popt = self._fit_function(f, x, esf, np.array([a0, 0.5, -0.5, d0]))
+        # Fit curve
+        esf_popt = self._fit_function(model_esf, x, esf, np.array([a0, 0.5, -0.5, d0]))
         if esf_popt is None:
-            logging.debug("ESF fit failed")
             return None, None, None, None, None
         try:
-            v_max = np.max(f(np.arange(x[-1], x[-1] + 4, 0.1), *esf_popt))
-            v_min = np.mean(f(np.arange(x[0] - 4, x[0], 0.1), *esf_popt))
+            v_max = np.max(model_esf(np.arange(x[-1], x[-1] + 4, 0.1), *esf_popt))
+            v_min = np.min(model_esf(np.arange(x[0] - 4, x[0], 0.1), *esf_popt))
         except:
-            ilogging.debug("min, max not found")
             return None, None, None, None, None
 
 
         if v_min is None or v_max is None:
-            logging.debug("min, max not found")
             return None, None, None, None, None
 
         if v_max - v_min == 0:
-            logging.debug("min, max not found")
             return None, None, None, None, None
+        # Normalize ESF
         esf_norm = (esf - v_min) / (v_max - v_min)
-        esf_norm_popt = self._fit_function(f, x, esf_norm, p0=[1, 0.5, 0.5, 0])
-        return esf_norm, v_min, v_max, esf_popt, esf_norm_popt
+        # Fit curve to normalized ESF
+        esf_norm_popt = self._fit_function(model_esf, x, esf_norm, p0=[1, 0.5, 0.5, 0])
+        return (esf_norm, v_min, v_max, esf_popt, esf_norm_popt)
 
-    def evaluate_esf(self, lsf_popt,  esf_norm_popt, esf, esf_norm, v_min, v_max, x):
+    def evaluate_esf(self, lsf_popt,  esf_norm_popt, esf_norm, x) -> bool:
+        """
+        Evaluate the quality of the ESF by calculating the edge SNR and checking if it is above the threshold, and
+        by calculating the R2 value of the curve fitting, and also checking if it is above the threshold value.
+        :param lsf_popt:
+        :param esf_norm_popt:
+        :param esf:
+        :param esf_norm:
+        :param v_min:
+        :param v_max:
+        :param x:
+        :return:
+        """
         if lsf_popt is None or esf_norm_popt is None:
-            logging.debug("lsf or esf_norm fitting failed")
             return False
-        a, b, c = lsf_popt
-        #logging.debug(a,b,c)
-        _left = esf[np.argwhere(x[1:] < b - 3 * c)]
-        _right = esf[np.argwhere(x[1:] > b + 3 * c)]
-        #logging.debug(_left.shape, _right.shape)
+
+        # Calculate R2 of the fit
+        residuals = esf_norm - model_esf(x, *esf_norm_popt)
+        ss_res = np.sum(residuals ** 2)
+        ss_tot = np.sum((esf_norm - np.mean(esf_norm)) ** 2)
+        r_squared = 1 - (ss_res / ss_tot)
+        if r_squared < self.r2_threshold:
+            return False
+
+        # Calculate edge SNR
+        new_lsf = np.diff(model_esf(x, *esf_norm_popt))
+        idx = np.argwhere(new_lsf/np.max(new_lsf) < 0.05).flatten()
+        if idx.shape[0]<=5:
+            return False
+        try:
+           idx_ = np.argwhere(np.diff(idx) > 1).flatten()[0]
+        except:
+            return False
+        x_left = idx[idx_]
+        x_right = idx[idx_+1]
+        _left = esf_norm[:x_left]
+        _right = esf_norm[x_right:]
         if _left.shape[0]==0 or _right.shape[0]==0:
-            # if _left.shape[0]==0:
-            #     logging.debug("no left")
-            #     logging.debug(b - 3 * c)
-            # if _right.shape[0]==0:
-            #     logging.debug("no right")
-            #     logging.debug(b + 3 * c)
-            logging.debug("left or right wing too small")
             return False
         noise1 = np.std(_left)
         noise2 = np.std(_right)
 
         noise = np.nanmean([noise1, noise2])
         if noise <= 0:
-            logging.debug("noise is not positive")
+            # logging.debug("noise is not positive")
             return False
-        edge_snr = np.abs(v_min - v_max) / noise
-       # logging.debug(f"snr {edge_snr}")
+        edge_snr = 1 / noise
 
 
-        # try:
-        #     spline = UnivariateSpline(x[1:], lsf - np.max(lsf) / 2, s=0)
-        #     r1, r2 = spline.roots()
-        #     fwhm = np.max([r1, r2]) - np.min([r1, r2])
-        # except:
-        #     fwhm = 0
+        if self.debug:
+            print(f"snr {edge_snr}")
 
-
-        residuals = esf_norm - f(x, *esf_norm_popt)
-        ss_res = np.sum(residuals ** 2)
-        ss_tot = np.sum((esf_norm - np.mean(esf_norm)) ** 2)
-        r_squared = 1 - (ss_res / ss_tot)
-        #logging.debug(edge_snr, r_squared)
-        if self.log_level==logging.DEBUG:
-            fig, ax = plt.subplots()
-            ax.scatter(x, esf_norm)
-            ax.plot(x, f(x, *esf_norm_popt))
-            ax.title.set_text(f"{edge_snr}, {r_squared}")
-            plt.show()
-            plt.clf()
-        if edge_snr > self.snr_threshold and r_squared > self.r2_threshold:
-
+        if self.debug:
+            print(edge_snr, r_squared)
+        if edge_snr >= self.snr_threshold and r_squared >= self.r2_threshold:
+            self.edge_snrs[-1].append(edge_snr)
             return True
 
-        if edge_snr <= self.snr_threshold:
-            logging.debug("SNR too low")
-        if r_squared <= self.r2_threshold:
-            logging.debug("r2 is too low")
         return False
 
+    def calculate_rer(self, edge_list: List) -> np.array:
+        """
+        Given the list of edges, calculates the RER value for each edge.
+        :param edge_list:
+        :return:
+        """
+        rers = []
+        for edge in edge_list:
+            x, esf, lsf, esf_norm_popt = edge
+            loc_50perc = x[np.argmin(np.abs(model_esf(x, *esf_norm_popt) - 0.5))]
+            rer = model_esf(loc_50perc + 0.5, *esf_norm_popt) - model_esf(loc_50perc - 0.5, *esf_norm_popt)
+            rers.append(rer)
+        if len(rers) < 1:
+            return None
+        return np.array(rers)
 
+    def calculate_fwhm(self, edge_list: List) -> np.array:
+        """
+        Given the list of edges, calculates the FWHM value for each edge.
+        :param edge_list:
+        :return:
+        """
+        fwhms = []
+        for edge in (edge_list):
+            x, esf, lsf, esf_norm_popt = edge
+            try:
+               # lsf_ = np.abs(np.diff(model_esf(x_esf, *esf_popt)))
+                spline = UnivariateSpline(np.arange(lsf.shape[0]), lsf - np.max(lsf) / 2, s=0)
+                r1, r2 = spline.roots()
+                fwhm = np.max([r1, r2]) - np.min([r1, r2])
+                fwhms.append(fwhm / 10)
+            except:
+                continue
+        if len(fwhms) < 1:
+            return None
+        return np.array(fwhms)
+
+    def calculate_mtf(self, edge_list: List) -> np.array:
+        """
+        Given a list of edges, calculates the MTF curve for each edge, and returns the value at
+        the Nyquist and half Nyquist frequencies.
+        :param edge_list:
+        :return:
+        """
+        mtf_nyq = []
+        mtf_half_nyq = []
+        for edge in edge_list:
+            x, esf, lsf, esf_norm_popt = edge
+            try:
+                N = lsf.shape[0]
+                T = 0.1
+                yf = fft(lsf)
+                xf = fftfreq(N, T)[:N // 2]
+                mtf = 2.0 / N * np.abs(yf[0:N // 2])
+                mtf = mtf / mtf[0]
+                idx = np.argwhere(xf < 1.5).flatten()
+                p = interp1d(xf[idx], mtf[idx], kind='cubic')
+                mtf_nyq.append(p(0.5))
+                mtf_half_nyq.append(p(0.25))
+
+            except:
+                pass
+        if len(mtf_nyq) < 1:
+            return None
+        return np.array(mtf_nyq), np.array(mtf_half_nyq)
+
+
+def sharpness_function_from_array(
+    img: np.array,
+    metrics: List = ['RER', 'FWHM', 'MTF'],
+    **kwargs: Any
+) -> Dict:
+    """
+    Generic function to apply either SNR algorithm for an image.
+    Args:
+        image: a numpy array containing your image
+        metrics: A list of the metrics you wish to calculate. Available metrics: RER, FWHM, MTF.
+        kwargs: the SharpnessMeasure class has many tuneable parameters. If you wish to set any of them differently from
+        the default, pass them here as keyword arguments.
+    """
+
+    if img.shape[0] < 5:
+        img = np.moveaxis(img, 0, -1)
+    if len(img.shape) < 3:
+        img = np.expand_dims(img, -1)
+    metrics = [s.upper() for s in metrics]
+    if 'RER' in metrics:
+        kwargs['get_rer'] = True
+    if 'FWHM' in metrics:
+        kwargs['get_fwhm'] = True
+    if 'MTF' in metrics:
+        kwargs['get_mtf'] = True
+    sharpness = SharpnessMeasure(**kwargs)
+    return sharpness.apply(img)
+
+
+
+def sharpness_function_from_fn(
+    image: str,
+    ext: str = "tif",
+    metrics: List = ['RER', 'FWHM', 'MTF'],
+    **kwargs: Any
+) -> Dict:
+    """
+    Generic function to apply either SNR algorithm for an image.
+    Args:
+        image: the path your image
+        ext: the extension of your image
+        metrics: A list of the metrics you wish to calculate. Available metrics: RER, FWHM, MTF.
+        kwargs: the SharpnessMeasure class has many tuneable parameters. If you wish to set any of them differently from
+        the default, pass them here as keyword arguments.
+    """
+    if ext == "tif":
+        with rasterio.open(image, "r") as data:
+            img = data.read()
+    else:
+        img = cv2.imread(image)
+    if img.shape[0] < 5:
+        img = np.moveaxis(img, 0, -1)
+    if len(img.shape) < 3:
+        img = np.expand_dims(img, -1)
+    metrics = [s.upper() for s in metrics]
+    kwargs['get_rer'] = 'RER' in metrics
+    kwargs['get_fwhm'] = 'FWHM' in metrics
+    kwargs['get_mtf'] = 'MTF' in metrics
+    sharpness = SharpnessMeasure(**kwargs)
+    return sharpness.apply(img)
+
+
+class SharpnessMetric(Metric):
+    def __init__(self, experiment_info: Any, ext: str = "tif", metrics: List = ['RER', 'FWHM', 'MTF'], parallel=True,
+                 njobs=-1, **kwargs: Any) -> None:
+        """
+        The metric to measure sharpness within an Iquaflow experiment.
+        :param experiment_info:
+        :param ext:
+        :param metrics:
+        :param parallel:
+        :param njobs:
+        :param kwargs:
+        """
+
+        super().__init__()
+        self.experiment_info = experiment_info
+        self.ext = ext
+        self.metrics = [s.upper() for s in metrics]
+        self.metric_names = []
+        for metric in metrics:
+            for direction in ['X', 'Y', 'other']:
+                if metric == 'MTF':
+                    self.metric_names.append(f"{metric}_NYQ_{direction}")
+                    self.metric_names.append(f"{metric}_halfNYQ_{direction}")
+                else:
+                    self.metric_names.append(f"{metric}_{direction}")
+
+        kwargs['calculate_mean'] = True
+        self.parallel = parallel
+        self.njobs = njobs
+        self.kwargs = kwargs
+
+    def apply(self, predictions: str, gt_path: str) -> Dict[str, float]:
+        # These are actually attributes from ds_wrapper
+        self.data_path = os.path.dirname(gt_path)
+        self.parent_folder = os.path.dirname(self.data_path)
+        # predictions be like /mlruns/1/6f1b6d86e42d402aa96665e63c44ef91/artifacts'
+        guessed_run_id = predictions.split(os.sep)[-3]
+        modifier_subfold = [
+            k
+            for k in self.experiment_info.runs
+            if self.experiment_info.runs[k]["run_id"] == guessed_run_id
+        ][0]
+        glob_crit = os.path.join(
+            self.parent_folder, modifier_subfold, "*", f"*.{self.ext}"
+        )
+        pred_fn_lst = glob(glob_crit)
+        results = {}
+        for m in self.metric_names:
+            results[m] = []
+        if self.parallel:
+            r = Parallel(n_jobs=self.njobs)(delayed(sharpness_function_from_fn)(pred_fn, self.ext, self.metrics, **self.kwargs) for pred_fn in pred_fn_lst)
+            for result in r:
+                for k,v in result['mean'].items():
+                    results[k] = v
+
+        else:
+            for i, pred_fn in enumerate(pred_fn_lst):
+                result = sharpness_function_from_fn(pred_fn, self.ext, self.metrics, **self.kwargs)['mean']
+
+                for k,v in result.items():
+                    results[k].append(v[0])
+        return {
+            k: round(np.nanmean(v), 3)
+            for k, v in results.items()
+        }
