@@ -254,8 +254,12 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
                             + str(cidx + 1)
                             + ".png"
                         )
-                        # if crop does not exist and also pkl of crop permutation, close
-                        if not os.path.exists(filename_cropped) and overwrite is False:
+                        # if crop does not exist and neither pkl of crop permutation, if it is not the first one, close
+                        if (
+                            not os.path.exists(filename_cropped)
+                            and overwrite is False
+                            and (midx > 0 or idx > 0 or cidx > 0)
+                        ):
                             print(f"{filename_cropped} does not exist")
                             if not os.path.exists(permut_path):
                                 print(f"{permut_path} also does not exist, exiting...")
@@ -401,8 +405,10 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
                                     )
                             self.mod_resol.append(image.size)
                             save_image(preproc_image, filename_cropped)
+                        """
                         else:
                             print(f"{filename_cropped} already exists")
+                        """
                         self.lists_crop_files.append(filename_cropped)
                         self.crop_mod_keys.append(self.mod_keys[midx])
                         self.crop_mod_params.append(self.mod_params[midx])
@@ -496,8 +502,10 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
                         )
                         save_image(preproc_image, filename_cropped)
                         self.mod_resol.append(image.size)
+                    """
                     else:
                         print(f"{os.path.basename(filename_cropped)} already exists")
+                    """
                     self.lists_crop_files.append(filename_cropped)
                     # print(self.lists_crop_files[-1])  # print last sample name
                 # os.remove(filename)  # remove image to clean disk
