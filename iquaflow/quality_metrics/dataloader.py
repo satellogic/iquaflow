@@ -1,6 +1,7 @@
 import os
+import pickle
 import shutil
-from typing import Any, List
+from typing import Any, List, Tuple
 
 import numpy as np
 import torch
@@ -14,8 +15,17 @@ from iquaflow.quality_metrics.tools import (
     check_if_contains_edges,
     check_if_contains_homogenous,
     force_rgb,
+    generate_crop_permut,
+    replace_crop_permut,
     split_list,
 )
+
+# alternative for crop generation using tensors (automatic)
+"""
+from iq_tool_box.quality_metrics.tools import get_tensor_crop_transform
+self.tCROP = get_tensor_crop_transform("random", self.crop_size)
+self.cCROP = get_tensor_crop_transform("center", self.crop_size)
+"""
 
 
 class Dataset(torch.utils.data.Dataset):  # type: ignore
@@ -27,6 +37,7 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
         num_crops: int = 50,
         crop_size: List[int] = [256, 256],
         split_percent: float = 1.0,
+        img_size: Tuple[int, int] = (5000, 5000),
     ):
         self.split_name = split_name
         self.data_path = data_path
@@ -34,6 +45,7 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
         self.num_crops = num_crops
         self.crop_size = crop_size
         self.split_percent = split_percent
+        self.default_img_size = img_size
         # list images to split
         lists_files = [
             self.data_input + "/" + filename for filename in os.listdir(self.data_input)
@@ -48,18 +60,9 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
         self.mod_params: List[Any] = []
         self.crop_mod_params: List[Any] = []
         self.mod_resol: List[Any] = []
-        # transforms
-        self.tCROP = transforms.Compose(
-            [
-                transforms.RandomCrop(size=(self.crop_size[0], self.crop_size[1])),
-            ]
-        )
-        self.cCROP = transforms.Compose(
-            [
-                transforms.CenterCrop(size=(self.crop_size[0], self.crop_size[1])),
-            ]
-        )
-        self.img_size = (5000, 5000)  # default
+        self.mod_sizes: List[Any] = []
+        self.output_dirs: List[Any] = []
+        # default using pil crop transform
 
     def __len__(self) -> int:
         """
@@ -118,9 +121,6 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
         return filename, param, Variable(x), Variable(y)
 
     def __modify__(self, ds_modifiers: Any, overwrite: Any = False) -> Any:
-        self.lists_mod_files = []  # one per each modifier
-        self.mod_keys = []  # one per each modifier
-        self.mod_params = []  # one per each modifier
         for midx in range(len(ds_modifiers)):
             ds_modifier = ds_modifiers[midx]
             mod_key = next(
@@ -147,12 +147,23 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
                 shutil.rmtree(split_dir)
                 os.mkdir(split_dir)
 
+            # reuse if existing modified images (same exact ones)
+            basenames_lists_files = [
+                os.path.basename(file) for file in self.lists_files
+            ]
+            list_mod_same_files = [
+                os.path.join(split_dir, file)
+                for file in os.listdir(split_dir)
+                if file in basenames_lists_files
+            ]
+            """ # (alternative) reuse whole folder
             if len(os.listdir(split_dir)) >= len(self.lists_files):
-                # (or) reuse existing modified images
                 list_mod_files = [
                     split_dir + "/" + filename for filename in os.listdir(split_dir)
                 ]
-
+            """
+            if len(list_mod_same_files) == len(self.lists_files):
+                list_mod_files = list_mod_same_files
             else:
                 ds_wrapper_modified = ds_modifier.modify_ds_wrapper(
                     ds_wrapper=ds_wrapper
@@ -170,62 +181,71 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
                         os.path.join(old_dir, file_name),
                         os.path.join(split_dir, file_name),
                     )
-                os.rmdir(old_dir)
+                shutil.rmtree(old_dir)
                 ds_wrapper_modified.data_input = split_dir
                 list_mod_files = [
                     ds_wrapper_modified.data_input + "/" + filename
                     for filename in os.listdir(ds_wrapper_modified.data_input)
                 ]
-            list_mod_files = split_list(list_mod_files, self.split_percent)
+            # list_mod_files = split_list(list_mod_files, self.split_percent)
+            mod_size = Image.open(list_mod_files[-1]).size
             self.lists_mod_files.append(list_mod_files)
             self.mod_keys.append(mod_key)
             self.mod_params.append(mod_param)
             # print(self.lists_mod_files[-1])
-            self.img_size = Image.open(self.lists_mod_files[midx][0]).size
+            self.mod_sizes.append(mod_size)
+            self.default_img_size = np.nanmin(np.array(self.mod_sizes), axis=0)
+            self.output_dirs.append(output_dir)
 
     def __crop__(self, overwrite: bool = False) -> None:
-        self.list_crop_files: List[str] = []
-        self.crop_mod_keys = []  # one per each modifier
-        self.crop_mod_params = []  # one per each modifier
-        self.mod_resol = []  # one per each modifier
-        if len(self.lists_mod_files) != 0:
+        if len(self.lists_mod_files) != 0:  # generate crops from modifiers
             # generating crops permutation
-            self.crops_permut_y = []
-            self.crops_permut_x = []
-            for cidx in range(self.num_crops):
-                self.crops_permut_y.append(
-                    np.random.choice(
-                        self.img_size[0] - self.crop_size[0],
-                        len(self.lists_mod_files[0]),
-                    )
+            num_images = len(self.lists_mod_files[0])
+            self.crops_permut_y, self.crops_permut_x = generate_crop_permut(
+                self.num_crops, num_images, self.default_img_size, self.crop_size
+            )
+            # for each modifier
+            for midx, list_mod_files in enumerate(self.lists_mod_files):
+                # check crops folder
+                filename_ini = self.lists_mod_files[midx][0]
+                crops_folder = (
+                    os.path.dirname(filename_ini)
+                    + "_"
+                    + str(self.num_crops)
+                    + "crops"
+                    + str(self.crop_size[0])
+                    + "x"
+                    + str(self.crop_size[1])
                 )
-                self.crops_permut_x.append(
-                    np.random.choice(
-                        self.img_size[1] - self.crop_size[1],
-                        len(self.lists_mod_files[0]),
-                    )
+                if not os.path.exists(crops_folder):
+                    os.mkdir(crops_folder)
+                elif overwrite is True:
+                    shutil.rmtree(crops_folder)
+                    os.mkdir(crops_folder)
+                # read crops_permut_y and crops_permut_x if pkl exists
+                permut_pkl_name = (
+                    "crop_permut_"
+                    + self.split_name
+                    + "_"
+                    + str(self.num_crops)
+                    + "crops"
+                    + str(self.crop_size[0])
+                    + "x"
+                    + str(self.crop_size[1])
+                    + ".pkl"
                 )
-            # cropping
-            for midx, list_mod_files in enumerate(
-                self.lists_mod_files
-            ):  # for each modifier
-                for idx, mod_files in enumerate(list_mod_files):  # for each sample
+                permut_path = os.path.join(self.output_dirs[midx], permut_pkl_name)
+                if os.path.exists(permut_path) and overwrite is False:
+                    with open(permut_path, "rb") as f:
+                        data = pickle.load(f)
+                        self.crops_permut_y = data[0]
+                        self.crops_permut_x = data[1]
+                # for each sample
+                for idx, mod_files in enumerate(list_mod_files):
                     filename = self.lists_mod_files[midx][idx]
                     filename_noext = os.path.splitext(os.path.basename(filename))[0]
-                    # if "train_images" in filename:
-                    #     import pdb; pdb.set_trace()
+                    # cropping
                     for cidx in range(self.num_crops):
-                        crops_folder = (
-                            os.path.dirname(filename)
-                            + "_"
-                            + str(self.num_crops)
-                            + "crops"
-                            + str(self.crop_size[0])
-                            + "x"
-                            + str(self.crop_size[1])
-                        )
-                        if not os.path.exists(crops_folder):
-                            os.mkdir(crops_folder)
                         filename_cropped = (
                             crops_folder
                             + "/"
@@ -234,6 +254,17 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
                             + str(cidx + 1)
                             + ".png"
                         )
+                        # if crop does not exist and neither pkl of crop permutation, if it is not the first one, close
+                        if (
+                            not os.path.exists(filename_cropped)
+                            and overwrite is False
+                            and (midx > 0 or idx > 0 or cidx > 0)
+                        ):
+                            print(f"{filename_cropped} does not exist")
+                            if not os.path.exists(permut_path):
+                                print(f"{permut_path} also does not exist, exiting...")
+                                exit()
+                        # generate crop
                         if not os.path.exists(filename_cropped) or overwrite is True:
                             print(
                                 "Generating crop ("
@@ -252,8 +283,7 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
                             image_tensor = transforms.functional.to_tensor(
                                 image
                             ).unsqueeze_(0)
-                            # else: reuse image if existing
-                            # preproc_image = self.tCROP(image_tensor)
+                            # all modifier cases
                             preproc_image = transforms.functional.crop(
                                 image_tensor,
                                 self.crops_permut_y[cidx][idx],
@@ -261,20 +291,72 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
                                 self.crop_size[0],
                                 self.crop_size[1],
                             )
+                            # preproc_image = self.tCROP(image_tensor)
                             crop_array = np.array(
                                 transforms.functional.to_pil_image(
                                     (torch.squeeze(preproc_image))
                                 )
                             )
-                            if self.mod_keys[midx] == "rer":
-                                while check_if_contains_edges(crop_array) is False:
-                                    self.crops_permut_y[cidx] = np.random.choice(
-                                        self.img_size[0] - self.crop_size[0],
-                                        len(self.lists_mod_files[0]),
+                            # (gsd case): adapt rescaled coords to current mod_size
+                            if self.mod_keys[midx] == "scale" and not os.path.exists(
+                                permut_path
+                            ):
+                                # get resize ratios and multiply crop permut location
+                                resize_ratio_y = (
+                                    self.mod_sizes[midx][0] / self.default_img_size[0]
+                                )
+                                resize_ratio_x = (
+                                    self.mod_sizes[midx][1] / self.default_img_size[1]
+                                )
+                                crop_resized_coords_y = int(
+                                    self.crops_permut_y[cidx][idx] * resize_ratio_y
+                                )
+                                crop_resized_coords_x = int(
+                                    self.crops_permut_x[cidx][idx] * resize_ratio_x
+                                )
+                                # add / substract crop location
+                                crop_size_resized = (
+                                    self.crop_size[0] * resize_ratio_y,
+                                    self.crop_size[1] * resize_ratio_x,
+                                )
+                                crop_resized_coords_y += (
+                                    self.crop_size[0] - crop_size_resized[0]
+                                )
+                                crop_resized_coords_x += (
+                                    self.crop_size[1] - crop_size_resized[1]
+                                )
+                                preproc_image = transforms.functional.crop(
+                                    image_tensor,
+                                    crop_resized_coords_y,
+                                    crop_resized_coords_x,
+                                    self.crop_size[0],
+                                    self.crop_size[1],
+                                )
+                                crop_array = np.array(
+                                    transforms.functional.to_pil_image(
+                                        (torch.squeeze(preproc_image))
                                     )
-                                    self.crops_permut_x[cidx] = np.random.choice(
-                                        self.img_size[1] - self.crop_size[1],
-                                        len(self.lists_mod_files[0]),
+                                )
+                            if (
+                                self.mod_keys[midx] == "rer" and midx == 0
+                            ):  # do it only for first modifier case (same crop for all modifiers)
+                                # check crop requirement 100 times (at max)
+                                check_count = 100
+                                for _ in range(check_count):
+                                    check = check_if_contains_edges(
+                                        crop_array, 0, 100, 0.002
+                                    )
+                                    if check is True:  # break loop if check is true
+                                        break
+                                    (
+                                        self.crops_permut_y[cidx][idx],
+                                        self.crops_permut_x[cidx][idx],
+                                    ) = replace_crop_permut(
+                                        self.crops_permut_y[cidx][idx],
+                                        self.crops_permut_x[cidx][idx],
+                                        1,
+                                        self.default_img_size,
+                                        self.crop_size,
                                     )
                                     preproc_image = transforms.functional.crop(
                                         image_tensor,
@@ -288,15 +370,26 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
                                             (torch.squeeze(preproc_image))
                                         )
                                     )
-                            elif self.mod_keys[midx] == "snr":
-                                while check_if_contains_homogenous(crop_array) is False:
-                                    self.crops_permut_y[cidx] = np.random.choice(
-                                        self.img_size[0] - self.crop_size[0],
-                                        len(self.lists_mod_files[0]),
+                            elif (
+                                self.mod_keys[midx] == "snr" and midx == 0
+                            ):  # do it only for first modifier case (same crop for all modifiers)
+                                # check crop requirement 100 times (at max)
+                                check_count = 100
+                                for _ in range(check_count):
+                                    check = check_if_contains_homogenous(
+                                        crop_array, 0, 30, 0.35
                                     )
-                                    self.crops_permut_x[cidx] = np.random.choice(
-                                        self.img_size[1] - self.crop_size[1],
-                                        len(self.lists_mod_files[0]),
+                                    if check is True:  # break loop if check is true
+                                        break
+                                    (
+                                        self.crops_permut_y[cidx][idx],
+                                        self.crops_permut_x[cidx][idx],
+                                    ) = replace_crop_permut(
+                                        self.crops_permut_y[cidx][idx],
+                                        self.crops_permut_x[cidx][idx],
+                                        1,
+                                        self.default_img_size,
+                                        self.crop_size,
                                     )
                                     preproc_image = transforms.functional.crop(
                                         image_tensor,
@@ -312,43 +405,65 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
                                     )
                             self.mod_resol.append(image.size)
                             save_image(preproc_image, filename_cropped)
+                        """
+                        else:
+                            print(f"{filename_cropped} already exists")
+                        """
                         self.lists_crop_files.append(filename_cropped)
                         self.crop_mod_keys.append(self.mod_keys[midx])
                         self.crop_mod_params.append(self.mod_params[midx])
-
                         # print(self.lists_crop_files[-1])  # print last sample name
                     # os.remove(filename) # remove modded image to clean disk
-        else:  # crops permutation
+                # write crops permutation after all coordinate modifications (gsd, snr, rer)
+                if not os.path.exists(permut_path) or overwrite is True:
+                    with open(permut_path, "wb") as f:
+                        pickle.dump([self.crops_permut_y, self.crops_permut_x], f)
+        else:  # generate crops from real images
             # generating crops permutation
-            self.crops_permut_y = []
-            self.crops_permut_x = []
-            for cidx in range(self.num_crops):
-                self.crops_permut_y.append(
-                    np.random.choice(
-                        self.img_size[0] - self.crop_size[0], len(self.lists_files)
-                    )
-                )
-                self.crops_permut_x.append(
-                    np.random.choice(
-                        self.img_size[1] - self.crop_size[1], len(self.lists_files)
-                    )
-                )
-            # cropping
+            num_images = len(self.lists_files)
+            self.crops_permut_y, self.crops_permut_x = generate_crop_permut(
+                self.num_crops, num_images, self.default_img_size, self.crop_size
+            )
+            # check crops folder
+            filename_ini = self.lists_files[0]
+            crops_folder = (
+                os.path.dirname(filename)
+                + "_"
+                + str(self.num_crops)
+                + "crops"
+                + str(self.crop_size[0])
+                + "x"
+                + str(self.crop_size[1])
+            )
+            if not os.path.exists(crops_folder):
+                os.mkdir(crops_folder)
+            elif overwrite is True:
+                shutil.rmtree(crops_folder)
+                os.mkdir(crops_folder)
+            # read crops_permut_y and crops_permut_x if pkl exists
+            permut_pkl_name = (
+                "crop_permut_"
+                + self.split_name
+                + "_"
+                + str(self.num_crops)
+                + "crops"
+                + str(self.crop_size[0])
+                + "x"
+                + str(self.crop_size[1])
+                + ".pkl"
+            )
+            permut_path = os.path.join(self.data_path, permut_pkl_name)
+            if os.path.exists(permut_path) and overwrite is False:
+                with open(permut_path, "rb") as f:
+                    data = pickle.load(f)
+                    self.crops_permut_y = data[0]
+                    self.crops_permut_x = data[1]
+            # for each sample
             for idx, file in enumerate(self.lists_files):
                 filename = self.lists_files[idx]
                 filename_noext = os.path.splitext(os.path.basename(filename))[0]
+                # cropping
                 for cidx in range(self.num_crops):
-                    crops_folder = (
-                        os.path.dirname(filename)
-                        + "_"
-                        + str(self.num_crops)
-                        + "crops"
-                        + str(self.crop_size[0])
-                        + "x"
-                        + str(self.crop_size[1])
-                    )
-                    if not os.path.exists(crops_folder):
-                        os.mkdir(crops_folder)
                     filename_cropped = (
                         crops_folder
                         + "/"
@@ -357,6 +472,12 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
                         + str(cidx + 1)
                         + ".png"
                     )
+                    # if crop does not exist and also pkl of crop permutation, close
+                    if not os.path.exists(filename_cropped) and overwrite is False:
+                        print(f"{filename_cropped} does not exist")
+                        if not os.path.exists(permut_path):
+                            print(f"{permut_path} also does not exist, exiting...")
+                            exit()
                     if not os.path.exists(filename_cropped) or overwrite is True:
                         print(
                             "Generating crop ("
@@ -366,10 +487,6 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
                             + ")"
                             + " for "
                             + filename_noext
-                            + " with "
-                            + str(self.mod_keys[midx])
-                            + " "
-                            + str(self.mod_params[midx])
                         )
                         image = Image.open(filename)
                         image_tensor = transforms.functional.to_tensor(
@@ -385,6 +502,14 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
                         )
                         save_image(preproc_image, filename_cropped)
                         self.mod_resol.append(image.size)
+                    """
+                    else:
+                        print(f"{os.path.basename(filename_cropped)} already exists")
+                    """
                     self.lists_crop_files.append(filename_cropped)
                     # print(self.lists_crop_files[-1])  # print last sample name
-                os.remove(filename)  # remove modded image to clean disk
+                # os.remove(filename)  # remove image to clean disk
+            # write crops permutation after all coordinate modifications (gsd, snr, rer)
+            if not os.path.exists(permut_path) or overwrite is True:
+                with open(permut_path, "wb") as f:
+                    pickle.dump([self.crops_permut_y, self.crops_permut_x], f)

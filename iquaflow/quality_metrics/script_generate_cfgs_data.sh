@@ -1,21 +1,19 @@
-
-
 # DEFAULT UNIQUE PARAMS
 cfg_folder_root="cfgs_data"
 #RUN
 trainid="data_test" # prefix
 #PATHS
-trainds="/home/Imatge/projects/satellogic/iquaflow-/tests/test_datasets/AerialImageDataset"
-traindsinput="/home/Imatge/projects/satellogic/iquaflow-/tests/test_datasets/AerialImageDataset/train/images"
-valds="/home/Imatge/projects/satellogic/iquaflow-/tests/test_datasets/AerialImageDataset"
-valdsinput="/home/Imatge/projects/satellogic/iquaflow-/tests/test_datasets/AerialImageDataset/test/images"
+trainds="/home/Imatge/projects/satellogic/iq_tool_box-/tests/test_datasets/AerialImageDataset"
+traindsinput="/home/Imatge/projects/satellogic/iq_tool_box-/tests/test_datasets/AerialImageDataset/train/images"
+valds="/home/Imatge/projects/satellogic/iq_tool_box-/tests/test_datasets/AerialImageDataset"
+valdsinput="/home/Imatge/projects/satellogic/iq_tool_box-/tests/test_datasets/AerialImageDataset/test/images"
 outputpath="tmp-"
 #HYPERPARAMS (UNIQUE)
 workers="8"
 data_shuffle="True"
 #HYPERPARAMS (SINGLE)
 epochs="200"
-splits="0.8 0.2"
+splits="0.445 0.112"
 #HYPERPARAMS (ALT)
 lr="1e-3"
 weight_decay="1e-4"

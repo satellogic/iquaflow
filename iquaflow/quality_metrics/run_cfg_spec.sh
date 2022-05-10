@@ -13,17 +13,10 @@ if [ -z "$2" ]
 fi
 if [ -z "$3" ]
   then
-    mymail="maildber@gmail.com"
+    seed=12345 #$RANDOM
   else
-   mymail=$3
-fi
-if [ -z "$4" ]
-  then
-    seed=$RANDOM
-  else
-    seed=$4
+    seed=$3
 fi
 
-python3 regressor.py --cfg_path=$file --cuda --gpus "$gpu" --seed $seed > tmp-/log_$(basename "$file" .cfg) ; 
-# echo $(cat tmp-/log_$(basename "$file" .cfg)) | mail -s tmp-/log_$(basename "$file" .cfg) "$mymail";
-python3 benchmark.py;
+python3 regressor.py --cfg_path=$file --cuda --gpus "$gpu" --seed $seed --debug;
+

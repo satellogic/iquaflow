@@ -4,6 +4,7 @@ import configparser
 import glob
 import json
 import os
+import pickle
 import shutil
 import time
 from bisect import bisect_right
@@ -31,11 +32,16 @@ from iquaflow.quality_metrics.tools import (
     circ3d_pad,
     force_rgb,
     get_accuracy,
+    get_accuracy_k,
+    get_AUC,
     get_fscore,
     get_median_rank,
     get_precision,
+    get_precision_k,
     get_recall,
+    get_recall_k,
     get_recall_rate,
+    get_tensor_crop_transform,
     soft2hard,
 )
 
@@ -50,10 +56,12 @@ def parse_params_cfg(default_cfg_path: str = "config.cfg") -> Any:
     parser.add_argument("--overwrite_crops", default=False, action="store_true")
     parser.add_argument("--plot_only", default=False, action="store_true")
     parser.add_argument("--data_only", default=False, action="store_true")
+    parser.add_argument("--validate_only", default=False, action="store_true")
     parser.add_argument("--cuda", default=False, action="store_true")
     parser.add_argument("--gpus", type=str, default="0")
     parser.add_argument("--seed", type=str, default=str(np.random.randint(12345)))
     parser.add_argument("--debug", default=False, action="store_true")
+    parser.add_argument("--save_mat", default=False, action="store_true")
     parser.add_argument(
         "--resume",
         default=False,
@@ -262,7 +270,7 @@ class MultiHead_ResNet(torch.nn.Module):
     def __init__(
         self,
         network: torch.nn.Module = models.resnet18(pretrained=True),
-        *heads: torch.nn.Module
+        *heads: torch.nn.Module,
     ) -> None:
         super().__init__()
         self.network = network
@@ -281,6 +289,7 @@ class Regressor:
         self.val_ds = args.valds
         self.val_ds_input = args.valdsinput
         self.epochs = int(args.epochs)
+        self.validate_only = args.validate_only
         self.lr = float(args.lr)
         self.momentum = float(args.momentum)
         self.weight_decay = float(args.weight_decay)
@@ -314,16 +323,8 @@ class Regressor:
             self.modifier_params, self.num_regs, self.parametizable_params
         )
         self.crop_size = args.input_size
-        self.tCROP = transforms.Compose(
-            [
-                transforms.RandomCrop(size=(self.crop_size[0], self.crop_size[1])),
-            ]
-        )  # define torch transform
-        self.cCROP = transforms.Compose(
-            [
-                transforms.CenterCrop(size=(self.crop_size[0], self.crop_size[1])),
-            ]
-        )  # define torch transform
+        self.tCROP = get_tensor_crop_transform(self.crop_size, "random")
+        self.cCROP = get_tensor_crop_transform(self.crop_size, "center")
         # Create Network
         if len(self.params) == 1:  # Single Head
             self.net = models.resnet18(pretrained=True)
@@ -334,7 +335,7 @@ class Regressor:
                 *[
                     torch.nn.Linear(512, self.num_regs[idx])
                     for idx in range(len(self.params))
-                ]
+                ],
             )
             # self.net=models.resnet18(pretrained=True)
             # self.net.fc=MultiHead(*[torch.nn.Linear(512, self.num_regs[idx]) for idx in range(len(self.params))])
@@ -358,11 +359,14 @@ class Regressor:
             self.output_path, self.checkpoint_name
         )  # add join names for params
 
+        # DEBUG Options
+        self.debug = args.debug
+        self.save_mat = args.save_mat
+
         # GPU Options
         self.cuda = args.cuda
         self.gpus = args.gpus
         self.seed = args.seed
-        self.debug = args.debug
         if self.cuda:
             print("=> use gpu id: '{}'".format(self.gpus))
             os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
@@ -379,71 +383,84 @@ class Regressor:
             self.criterion = self.criterion.cuda()
             self.net = self.net.cuda()
 
-    # GPU CASE
     def train_val(self, train_loader: Any, val_loader: Any) -> Any:
         best_loss = np.inf
         best_prec = 0.0
         best_rec = 0.0
-        train_losses = []
-        val_losses = []
-        train_precs = []
-        val_precs = []
-        train_recs = []
-        val_recs = []
-        train_accs = []
-        val_accs = []
-        train_fscores = []
-        val_fscores = []
-        train_medRs = []
-        val_medRs = []
-        train_recs_k1 = []
-        val_recs_k1 = []
-        train_recs_k5 = []
-        val_recs_k5 = []
-        train_recs_k10 = []
-        val_recs_k10 = []
-        for epoch in range(self.epochs):  # epoch
-            (
-                train_loss,
-                train_prec,
-                train_rec,
-                train_acc,
-                train_fscore,
-                train_medR,
-                train_rec_k1,
-                train_rec_k5,
-                train_rec_k10,
-                train_topK,
-                train_worstK,
-                train_topK_ranks,
-                train_worstK_ranks,
-            ) = self.train(train_loader, epoch)
-            (
-                val_loss,
-                val_prec,
-                val_rec,
-                val_acc,
-                val_fscore,
-                val_medR,
-                val_rec_k1,
-                val_rec_k5,
-                val_rec_k10,
-                val_topK,
-                val_worstK,
-                val_topK_ranks,
-                val_worstK_ranks,
-            ) = self.validate(val_loader, epoch)
-            if val_loss is None or train_loss is None:
-                import pdb
+        train_dict_results_whole = {}  # type: ignore
+        (
+            train_dict_results_whole["losses"],
+            train_dict_results_whole["precs"],
+            train_dict_results_whole["recs"],
+            train_dict_results_whole["accs"],
+            train_dict_results_whole["fscores"],
+            train_dict_results_whole["medRs"],
+            train_dict_results_whole["Rk1s"],
+            train_dict_results_whole["Rk5s"],
+            train_dict_results_whole["Rk10s"],
+            train_dict_results_whole["AUCs"],
+            train_dict_results_whole["precs_k1"],
+            train_dict_results_whole["precs_k5"],
+            train_dict_results_whole["precs_k10"],
+            train_dict_results_whole["recs_k1"],
+            train_dict_results_whole["recs_k5"],
+            train_dict_results_whole["recs_k10"],
+            train_dict_results_whole["accs_k1"],
+            train_dict_results_whole["accs_k5"],
+            train_dict_results_whole["accs_k10"],
+        ) = ([], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [])
+        val_dict_results_whole = {}  # type: ignore
+        (
+            val_dict_results_whole["losses"],
+            val_dict_results_whole["precs"],
+            val_dict_results_whole["recs"],
+            val_dict_results_whole["accs"],
+            val_dict_results_whole["fscores"],
+            val_dict_results_whole["medRs"],
+            val_dict_results_whole["Rk1s"],
+            val_dict_results_whole["Rk5s"],
+            val_dict_results_whole["Rk10s"],
+            val_dict_results_whole["AUCs"],
+            val_dict_results_whole["precs_k1"],
+            val_dict_results_whole["precs_k5"],
+            val_dict_results_whole["precs_k10"],
+            val_dict_results_whole["recs_k1"],
+            val_dict_results_whole["recs_k5"],
+            val_dict_results_whole["recs_k10"],
+            val_dict_results_whole["accs_k1"],
+            val_dict_results_whole["accs_k5"],
+            val_dict_results_whole["accs_k10"],
+        ) = ([], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [])
 
-                pdb.set_trace()
-            is_best = (val_loss < best_loss) & (
-                (val_prec > best_prec) | (val_rec > best_rec)
+        for epoch in range(self.epochs):  # epoch
+            # TRAIN
+            (
+                train_dict_results_epoch,
+                train_dict_results_batch,
+                train_dict_data_batch,
+            ) = self.train_val_epoch(train_loader, epoch, False)
+            # VALIDATE
+            (
+                val_dict_results_epoch,
+                val_dict_results_batch,
+                val_dict_data_batch,
+            ) = self.train_val_epoch(val_loader, epoch, True)
+
+            # CHECK BEST EPOCH CHECKPOINT
+            if (
+                val_dict_results_epoch["epoch_loss"] is None
+                and train_dict_results_epoch["epoch_loss"] is None
+            ):
+                print("Error: Validation and Training losses are None.")
+                raise
+            is_best = (val_dict_results_epoch["epoch_loss"] < best_loss) & (
+                (val_dict_results_epoch["epoch_prec"] > best_prec)
+                | (val_dict_results_epoch["epoch_rec"] > best_rec)
             )
             if is_best:
-                best_loss = val_loss
-                best_prec = val_prec
-                best_rec = val_rec
+                best_loss = val_dict_results_epoch["epoch_loss"]
+                best_prec = val_dict_results_epoch["epoch_prec"]
+                best_rec = val_dict_results_epoch["epoch_rec"]
                 # remove previous checkpoint
                 if os.path.exists(
                     self.checkpoint_path
@@ -456,125 +473,210 @@ class Regressor:
                 )
                 print("Found best model, saving checkpoint " + self.checkpoint_path)
                 torch.save(self.net, self.checkpoint_path)  # self.net.state_dict()
-
-                # copy top K files for that epoch
-                output_path_top = os.path.join(
-                    self.output_path, "top_epoch" + str(epoch)
-                )
-                if not os.path.exists(output_path_top):
-                    os.mkdir(output_path_top)
-                for idx, filename in enumerate(val_topK):
-                    file_newpath = os.path.join(
-                        output_path_top,
-                        "rank"
-                        + str(val_topK_ranks[idx])
-                        + "_"
-                        + os.path.basename(os.path.dirname(os.path.dirname(filename)))
-                        + "_"
-                        + os.path.basename(filename),
+                # SAVE TOP/WORST K
+                if self.debug:
+                    # copy top K files for that epoch
+                    output_path_top = os.path.join(
+                        self.output_path, "top_epoch" + str(epoch)
                     )
-                    shutil.copyfile(filename, file_newpath)
-                output_path_worst = os.path.join(
-                    self.output_path, "worst_epoch" + str(epoch)
-                )
-                if not os.path.exists(output_path_worst):
-                    os.mkdir(output_path_worst)
-                for filename in val_worstK:
-                    file_newpath = os.path.join(
-                        output_path_worst,
-                        "rank"
-                        + str(val_worstK_ranks[idx])
-                        + "_"
-                        + os.path.basename(os.path.dirname(os.path.dirname(filename)))
-                        + "_"
-                        + os.path.basename(filename),
+                    if not os.path.exists(output_path_top):
+                        os.mkdir(output_path_top)
+                    for idx, filename in enumerate(val_dict_results_epoch["topK"]):
+                        file_newpath = os.path.join(
+                            output_path_top,
+                            "rank"
+                            + str(val_dict_results_epoch["topK_ranks"][idx])
+                            + "_"
+                            + os.path.basename(
+                                os.path.dirname(os.path.dirname(filename))
+                            )
+                            + "_"
+                            + os.path.basename(filename),
+                        )
+                        shutil.copyfile(filename, file_newpath)
+                    # copy worst K files for that epoch
+                    output_path_worst = os.path.join(
+                        self.output_path, "worst_epoch" + str(epoch)
                     )
-                    shutil.copyfile(filename, file_newpath)
+                    if not os.path.exists(output_path_worst):
+                        os.mkdir(output_path_worst)
+                    for idx, filename in enumerate(val_dict_results_epoch["worstK"]):
+                        file_newpath = os.path.join(
+                            output_path_worst,
+                            "rank"
+                            + str(val_dict_results_epoch["worstK_ranks"][idx])
+                            + "_"
+                            + os.path.basename(
+                                os.path.dirname(os.path.dirname(filename))
+                            )
+                            + "_"
+                            + os.path.basename(filename),
+                        )
+                        shutil.copyfile(filename, file_newpath)
 
-            train_losses.append(train_loss)
-            val_losses.append(val_loss)
-            train_precs.append(train_prec)
-            val_precs.append(val_prec)
-            train_recs.append(train_rec)
-            val_recs.append(val_rec)
-            train_accs.append(train_acc)
-            val_accs.append(val_acc)
-            train_fscores.append(train_fscore)
-            val_fscores.append(val_fscore)
-            train_medRs.append(train_medR)
-            val_medRs.append(val_medR)
-            train_recs_k1.append(train_rec_k1)
-            val_recs_k1.append(val_rec_k1)
-            train_recs_k5.append(train_rec_k5)
-            val_recs_k5.append(val_rec_k5)
-            train_recs_k10.append(train_rec_k10)
-            val_recs_k10.append(val_rec_k10)
-            print(
-                "Train Loss: "
-                + str(train_loss)
-                + " Train Precision: "
-                + str(train_prec)
-                + " Train Recall: "
-                + str(train_rec)
-                + " Train Accuracy: "
-                + str(train_acc)
-                + " Train Fscore: "
-                + str(train_fscore)
-                + " Train medR: "
-                + str(train_medR)
-                + " Train R@1: "
-                + str(train_rec_k1)
-                + " Train R@5: "
-                + str(train_rec_k5)
-                + " Train R@10: "
-                + str(train_rec_k10)
+            # append all results per epoch
+            train_dict_results_whole["losses"].append(
+                train_dict_results_epoch["epoch_loss"]
             )
-            print(
-                "Validation Loss: "
-                + str(val_loss)
-                + " Validation Precision: "
-                + str(val_prec)
-                + " Validation Recall: "
-                + str(val_rec)
-                + " Validation Accuracy: "
-                + str(val_acc)
-                + " Validation Fscore: "
-                + str(val_fscore)
-                + " Validation medR: "
-                + str(val_medR)
-                + " Validation R@1: "
-                + str(val_rec_k1)
-                + " Validation R@5: "
-                + str(val_rec_k5)
-                + " Validation R@10: "
-                + str(val_rec_k10)
+            train_dict_results_whole["precs"].append(
+                train_dict_results_epoch["epoch_prec"]
             )
+            train_dict_results_whole["recs"].append(
+                train_dict_results_epoch["epoch_rec"]
+            )
+            train_dict_results_whole["accs"].append(
+                train_dict_results_epoch["epoch_acc"]
+            )
+            train_dict_results_whole["fscores"].append(
+                train_dict_results_epoch["epoch_fscore"]
+            )
+            train_dict_results_whole["medRs"].append(
+                train_dict_results_epoch["epoch_medR"]
+            )
+            train_dict_results_whole["Rk1s"].append(
+                train_dict_results_epoch["epoch_Rk1"]
+            )
+            train_dict_results_whole["Rk5s"].append(
+                train_dict_results_epoch["epoch_Rk5"]
+            )
+            train_dict_results_whole["Rk10s"].append(
+                train_dict_results_epoch["epoch_Rk10"]
+            )
+            train_dict_results_whole["AUCs"].append(
+                train_dict_results_epoch["epoch_AUC"]
+            )
+            train_dict_results_whole["precs_k1"].append(
+                train_dict_results_epoch["epoch_prec_k1"]
+            )
+            train_dict_results_whole["precs_k5"].append(
+                train_dict_results_epoch["epoch_prec_k5"]
+            )
+            train_dict_results_whole["precs_k10"].append(
+                train_dict_results_epoch["epoch_prec_k10"]
+            )
+            train_dict_results_whole["recs_k1"].append(
+                train_dict_results_epoch["epoch_rec_k1"]
+            )
+            train_dict_results_whole["recs_k5"].append(
+                train_dict_results_epoch["epoch_rec_k5"]
+            )
+            train_dict_results_whole["recs_k10"].append(
+                train_dict_results_epoch["epoch_rec_k10"]
+            )
+            train_dict_results_whole["accs_k1"].append(
+                train_dict_results_epoch["epoch_acc_k1"]
+            )
+            train_dict_results_whole["accs_k5"].append(
+                train_dict_results_epoch["epoch_acc_k5"]
+            )
+            train_dict_results_whole["accs_k10"].append(
+                train_dict_results_epoch["epoch_acc_k10"]
+            )
+            val_dict_results_whole["losses"].append(
+                val_dict_results_epoch["epoch_loss"]
+            )
+            val_dict_results_whole["precs"].append(val_dict_results_epoch["epoch_prec"])
+            val_dict_results_whole["recs"].append(val_dict_results_epoch["epoch_rec"])
+            val_dict_results_whole["accs"].append(val_dict_results_epoch["epoch_acc"])
+            val_dict_results_whole["fscores"].append(
+                val_dict_results_epoch["epoch_fscore"]
+            )
+            val_dict_results_whole["medRs"].append(val_dict_results_epoch["epoch_medR"])
+            val_dict_results_whole["Rk1s"].append(val_dict_results_epoch["epoch_Rk1"])
+            val_dict_results_whole["Rk5s"].append(val_dict_results_epoch["epoch_Rk5"])
+            val_dict_results_whole["Rk10s"].append(val_dict_results_epoch["epoch_Rk10"])
+            val_dict_results_whole["AUCs"].append(val_dict_results_epoch["epoch_AUC"])
+            val_dict_results_whole["precs_k1"].append(
+                val_dict_results_epoch["epoch_prec_k1"]
+            )
+            val_dict_results_whole["precs_k5"].append(
+                val_dict_results_epoch["epoch_prec_k5"]
+            )
+            val_dict_results_whole["precs_k10"].append(
+                val_dict_results_epoch["epoch_prec_k10"]
+            )
+            val_dict_results_whole["recs_k1"].append(
+                val_dict_results_epoch["epoch_rec_k1"]
+            )
+            val_dict_results_whole["recs_k5"].append(
+                val_dict_results_epoch["epoch_rec_k5"]
+            )
+            val_dict_results_whole["recs_k10"].append(
+                val_dict_results_epoch["epoch_rec_k10"]
+            )
+            val_dict_results_whole["accs_k1"].append(
+                val_dict_results_epoch["epoch_acc_k1"]
+            )
+            val_dict_results_whole["accs_k5"].append(
+                val_dict_results_epoch["epoch_acc_k5"]
+            )
+            val_dict_results_whole["accs_k10"].append(
+                val_dict_results_epoch["epoch_acc_k10"]
+            )
+
+            # save pkl
+            dict_results_epoch_pkl = os.path.join(self.output_path, "results.pkl")
+            with open(dict_results_epoch_pkl, "wb") as f:
+                pickle.dump([train_dict_results_whole, val_dict_results_whole], f)
+            # save csv
             np.savetxt(
                 os.path.join(self.output_path, "stats.csv"),
                 np.asarray(
                     [
-                        train_losses,
-                        val_losses,
-                        train_precs,
-                        val_precs,
-                        train_recs,
-                        val_recs,
-                        train_accs,
-                        val_accs,
-                        train_fscores,
-                        val_fscores,
-                        train_medRs,
-                        val_medRs,
-                        train_recs_k1,
-                        val_recs_k1,
-                        train_recs_k5,
-                        val_recs_k5,
-                        train_recs_k10,
-                        val_recs_k10,
+                        train_dict_results_whole["losses"],
+                        val_dict_results_whole["losses"],
+                        train_dict_results_whole["precs"],
+                        val_dict_results_whole["precs"],
+                        train_dict_results_whole["recs"],
+                        val_dict_results_whole["recs"],
+                        train_dict_results_whole["accs"],
+                        val_dict_results_whole["accs"],
+                        train_dict_results_whole["fscores"],
+                        val_dict_results_whole["fscores"],
+                        train_dict_results_whole["medRs"],
+                        val_dict_results_whole["medRs"],
+                        train_dict_results_whole["Rk1s"],
+                        val_dict_results_whole["Rk1s"],
+                        train_dict_results_whole["Rk5s"],
+                        val_dict_results_whole["Rk5s"],
+                        train_dict_results_whole["Rk10s"],
+                        val_dict_results_whole["Rk10s"],
+                        train_dict_results_whole["AUCs"],
+                        val_dict_results_whole["AUCs"],
+                        train_dict_results_whole["precs_k1"],
+                        val_dict_results_whole["precs_k1"],
+                        train_dict_results_whole["precs_k5"],
+                        val_dict_results_whole["precs_k5"],
+                        train_dict_results_whole["precs_k10"],
+                        val_dict_results_whole["precs_k10"],
+                        train_dict_results_whole["recs_k1"],
+                        val_dict_results_whole["recs_k1"],
+                        train_dict_results_whole["recs_k5"],
+                        val_dict_results_whole["recs_k5"],
+                        train_dict_results_whole["recs_k10"],
+                        val_dict_results_whole["recs_k10"],
+                        train_dict_results_whole["accs_k1"],
+                        val_dict_results_whole["accs_k1"],
+                        train_dict_results_whole["accs_k5"],
+                        val_dict_results_whole["accs_k5"],
+                        train_dict_results_whole["accs_k10"],
+                        val_dict_results_whole["accs_k10"],
                     ]
                 ),
                 delimiter=",",
             )
+            if self.save_mat:
+                dict_results_batch_pkl = os.path.join(
+                    self.output_path, f"results_epoch{epoch}.pkl"
+                )
+                with open(dict_results_batch_pkl, "wb") as f:
+                    pickle.dump([train_dict_results_batch, val_dict_results_batch], f)
+                dict_data_batch_pkl = os.path.join(
+                    self.output_path, f"data_epoch{epoch}.pkl"
+                )
+                with open(dict_data_batch_pkl, "wb") as f:
+                    pickle.dump([train_dict_data_batch, val_dict_data_batch], f)
+
         plot_single(self.output_path)
         # plot_benchmark(os.path.dirname(self.output_path))
 
@@ -719,26 +821,125 @@ class Regressor:
 
         return self.net(image_tensor)
 
-    def train(self, train_loader: Any, epoch: Any) -> Any:
-        self.net.train()  # train mode
-        losses = np.array([])
-        precs = np.array([])
-        recs = np.array([])
-        accs = np.array([])
-        fscores = np.array([])
-        medRs = np.array([])
-        recs_k1 = np.array([])
-        recs_k5 = np.array([])
-        recs_k10 = np.array([])
-        # xbatches=[x for bix,(x,y) in enumerate(train_loader)]
-        # ybatches=[y for bix,(x,y) in enumerate(train_loader)]
-        filenames = []
-        ranks = []
-        for bidx, (filename, param, x, y) in enumerate(
-            train_loader
-        ):  # ongoing: if net is outputting several outputs, separate target and prediction for each param and make sure evaluate that specific head
-            # join regression batch for crops and modifiers
-            x.requires_grad = True
+    def train_val_epoch(
+        self, dataset_loader: Any, epoch: Any, validate: bool = False
+    ) -> Any:
+        dict_results_batch = {}
+        (
+            dict_results_batch["losses"],
+            dict_results_batch["precs"],
+            dict_results_batch["recs"],
+            dict_results_batch["accs"],
+            dict_results_batch["fscores"],
+            dict_results_batch["medRs"],
+            dict_results_batch["Rk1s"],
+            dict_results_batch["Rk5s"],
+            dict_results_batch["Rk10s"],
+            dict_results_batch["AUCs"],
+            dict_results_batch["precs_k1"],
+            dict_results_batch["precs_k5"],
+            dict_results_batch["precs_k10"],
+            dict_results_batch["recs_k1"],
+            dict_results_batch["recs_k5"],
+            dict_results_batch["recs_k10"],
+            dict_results_batch["accs_k1"],
+            dict_results_batch["accs_k5"],
+            dict_results_batch["accs_k10"],
+        ) = (
+            np.array([]),
+            np.array([]),
+            np.array([]),
+            np.array([]),
+            np.array([]),
+            np.array([]),
+            np.array([]),
+            np.array([]),
+            np.array([]),
+            np.array([]),
+            np.array([]),
+            np.array([]),
+            np.array([]),
+            np.array([]),
+            np.array([]),
+            np.array([]),
+            np.array([]),
+            np.array([]),
+            np.array([]),
+        )
+        dict_results_epoch = {}
+        (
+            dict_results_epoch["epoch_loss"],
+            dict_results_epoch["epoch_prec"],
+            dict_results_epoch["epoch_rec"],
+            dict_results_epoch["epoch_acc"],
+            dict_results_epoch["epoch_fscore"],
+            dict_results_epoch["epoch_medR"],
+            dict_results_epoch["epoch_Rk1"],
+            dict_results_epoch["epoch_Rk5"],
+            dict_results_epoch["epoch_Rk10"],
+            dict_results_epoch["epoch_AUC"],
+            dict_results_epoch["epoch_prec_k1"],
+            dict_results_epoch["epoch_prec_k5"],
+            dict_results_epoch["epoch_prec_k10"],
+            dict_results_epoch["epoch_rec_k1"],
+            dict_results_epoch["epoch_rec_k5"],
+            dict_results_epoch["epoch_rec_k10"],
+            dict_results_epoch["epoch_acc_k1"],
+            dict_results_epoch["epoch_acc_k5"],
+            dict_results_epoch["epoch_acc_k10"],
+        ) = (
+            np.nan,
+            np.nan,
+            np.nan,
+            np.nan,
+            np.nan,
+            np.nan,
+            np.nan,
+            np.nan,
+            np.nan,
+            np.nan,
+            np.nan,
+            np.nan,
+            np.nan,
+            np.nan,
+            np.nan,
+            np.nan,
+            np.nan,
+            np.nan,
+            np.nan,
+        )
+        dict_data_batch = {}  # type: ignore
+        (
+            dict_data_batch["filenames"],
+            dict_data_batch["ranks"],
+            dict_data_batch["predictions"],
+            dict_data_batch["targets"],
+        ) = (
+            [],
+            [],
+            [],
+            [],
+        )
+
+        # set training type (gradients)
+        if validate is False:
+            torch.enable_grad()
+            self.net.train()
+        else:
+            torch.no_grad()
+            self.net.eval()
+
+        # validate_only case, exit if training
+        if validate is False and self.validate_only is True:
+            return (dict_results_epoch, dict_results_batch, dict_data_batch)
+
+        # join regression batch for crops and modifiers
+        # xbatches=[x for bix,(x,y) in enumerate(dataset_loader)]
+        # ybatches=[y for bix,(x,y) in enumerate(dataset_loader)]
+
+        for bidx, (filename, param, x, y) in enumerate(dataset_loader):
+            if validate is False:
+                x.requires_grad = True
             # transform sigmas to regression intervals (yreg)
             param = [
                 self.params[0] if par == "" else par for par in param
@@ -756,10 +957,10 @@ class Regressor:
             if self.cuda:
                 yreg = yreg.cuda()
                 x = x.cuda()
-
             prediction = self.net(x)  # input x and predict based on x, [b,:,:,:]
 
-            if len(self.params) == 1:
+            # calculate prediction metrics
+            if len(self.params) == 1:  # single head
                 target = torch.eye(self.num_regs[0])[yreg]
                 pred = torch.nn.Sigmoid()(prediction)
                 if self.cuda:
@@ -767,40 +968,26 @@ class Regressor:
                 # calc loss
                 loss = self.criterion(pred, target)  # yreg as alternative (classes)
 
-                # output to soft encoding (threshold output and compute) to get TP,FP...
-                output_soft = soft2hard(prediction, self.soft_threshold)
-                prec = get_precision(output_soft, target)
-                rec = get_recall(output_soft, target)
-                acc = get_accuracy(output_soft, target)
-                fscore = get_fscore(output_soft, target)
+                # output encoding (threshold output and compute) to get TP,FP...
+                output_hard = soft2hard(prediction, self.soft_threshold)
+                prec = get_precision(output_hard, target)
+                rec = get_recall(output_hard, target)
+                acc = get_accuracy(output_hard, target)
+                fscore = get_fscore(output_hard, target)
                 medR, rank = get_median_rank(prediction, target)
-                rec_k1 = get_recall_rate(prediction, target, 1)
-                rec_k5 = get_recall_rate(prediction, target, 5)
-                rec_k10 = get_recall_rate(prediction, target, 10)
-                if self.debug:  # Debug
-                    print(
-                        "Batch("
-                        + str(bidx)
-                        + "/"
-                        + str(train_loader.__len__())
-                        + ")"
-                        + " Precision="
-                        + str(float(prec))
-                        + " Recall="
-                        + str(float(rec))
-                        + " Accuracy="
-                        + str(float(acc))
-                        + " F-Score="
-                        + str(float(fscore))
-                        + " medR="
-                        + str(float(medR))
-                        + " R@1="
-                        + str(float(rec_k1))
-                        + " R@5="
-                        + str(float(rec_k5))
-                        + " R@10="
-                        + str(float(rec_k10))
-                    )
+                Rk1 = get_recall_rate(prediction, target, 1)
+                Rk5 = get_recall_rate(prediction, target, 5)
+                Rk10 = get_recall_rate(prediction, target, 10)
+                AUC = get_AUC(output_hard, target)
+                prec_k1 = get_precision_k(output_hard, target, 1, self.soft_threshold)
+                prec_k5 = get_precision_k(output_hard, target, 5, self.soft_threshold)
+                prec_k10 = get_precision_k(output_hard, target, 10, self.soft_threshold)
+                rec_k1 = get_recall_k(output_hard, target, 1, self.soft_threshold)
+                rec_k5 = get_recall_k(output_hard, target, 5, self.soft_threshold)
+                rec_k10 = get_recall_k(output_hard, target, 10, self.soft_threshold)
+                acc_k1 = get_accuracy_k(output_hard, target, 1, self.soft_threshold)
+                acc_k5 = get_accuracy_k(output_hard, target, 5, self.soft_threshold)
+                acc_k10 = get_accuracy_k(output_hard, target, 10, self.soft_threshold)
                 """
                 par = self.params[0]
                 for i, tgt in enumerate(target):
@@ -808,18 +995,55 @@ class Regressor:
                     target_json = {par: self.yclasses[par][target[i].argmax()]}
                     # print("target "+str(target_json)+" pred "+str(output_json)+" batch "+str(bidx+1))
                 """
-            else:
-                # compute losses differently for each head
-                loss = 0.0
-                pprec = []
-                preca = []
-                pacc = []
-                pfscore = []
-                pmedR = []
-                preca_k1 = []
-                preca_k5 = []
-                preca_k10 = []
+                if self.save_mat:
+                    dict_data_batch["predictions"].append(
+                        prediction
+                    )  # note: prediction before sigmoid
+                    dict_data_batch["targets"].append(target)
+            else:  # multihead
+                loss = 0.0  # compute losses differently for each head
+                (
+                    pprec,
+                    preca,
+                    pacc,
+                    pfscore,
+                    pmedR,
+                    pRk1,
+                    pRk5,
+                    pRk10,
+                    pAUC,
+                    pprec_k1,
+                    pprec_k5,
+                    pprec_k10,
+                    preca_k1,
+                    preca_k5,
+                    preca_k10,
+                    pacc_k1,
+                    pacc_k5,
+                    pacc_k10,
+                ) = (
+                    [],
+                    [],
+                    [],
+                    [],
+                    [],
+                    [],
+                    [],
+                    [],
+                    [],
+                    [],
+                    [],
+                    [],
+                    [],
+                    [],
+                    [],
+                    [],
+                    [],
+                    [],
+                )
                 param_ids = [self.dict_params[par] for par in param]
+                pprediction = []
+                ptarget = []
                 for pidx, par in enumerate(self.params):
                     param_indices = [
                         ppidx for ppidx, pid in enumerate(param_ids) if pid == pidx
@@ -840,24 +1064,64 @@ class Regressor:
 
                     loss += param_loss  # final loss is sum of all param BCE losses
                     # todo: check if this loss computation works, or losses need to be adapted to each param/head?
-                    # output to soft encoding (threshold output and compute) to get TP,FP...
-                    output_soft = soft2hard(param_prediction, self.soft_threshold)
-                    param_prec = get_precision(output_soft, param_target)
-                    param_rec = get_recall(output_soft, param_target)
-                    param_acc = get_accuracy(output_soft, param_target)
-                    param_fscore = get_fscore(output_soft, param_target)
+
+                    # output encoding (threshold output and compute) to get TP,FP...
+                    output_hard = soft2hard(param_prediction, self.soft_threshold)
+                    param_prec = get_precision(output_hard, param_target)
+                    param_rec = get_recall(output_hard, param_target)
+                    param_acc = get_accuracy(output_hard, param_target)
+                    param_fscore = get_fscore(output_hard, param_target)
                     param_medR, rank = get_median_rank(param_prediction, param_target)
-                    param_rec_k1 = get_recall_rate(param_prediction, param_target, 1)
-                    param_rec_k5 = get_recall_rate(param_prediction, param_target, 5)
-                    param_rec_k10 = get_recall_rate(param_prediction, param_target, 10)
+                    param_Rk1 = get_recall_rate(param_prediction, param_target, 1)
+                    param_Rk5 = get_recall_rate(param_prediction, param_target, 5)
+                    param_Rk10 = get_recall_rate(param_prediction, param_target, 10)
+                    param_AUC = get_AUC(output_hard, param_target)
+                    param_prec_k1 = get_precision_k(
+                        output_hard, param_target, 1, self.soft_threshold
+                    )
+                    param_prec_k5 = get_precision_k(
+                        output_hard, param_target, 5, self.soft_threshold
+                    )
+                    param_prec_k10 = get_precision_k(
+                        output_hard, param_target, 10, self.soft_threshold
+                    )
+                    param_reca_k1 = get_recall_k(
+                        output_hard, param_target, 1, self.soft_threshold
+                    )
+                    param_reca_k5 = get_recall_k(
+                        output_hard, param_target, 5, self.soft_threshold
+                    )
+                    param_reca_k10 = get_recall_k(
+                        output_hard, param_target, 10, self.soft_threshold
+                    )
+                    param_acc_k1 = get_accuracy_k(
+                        output_hard, param_target, 1, self.soft_threshold
+                    )
+                    param_acc_k5 = get_accuracy_k(
+                        output_hard, param_target, 5, self.soft_threshold
+                    )
+                    param_acc_k10 = get_accuracy_k(
+                        output_hard, param_target, 10, self.soft_threshold
+                    )
+                    # append metrics per head
                     pprec.append(param_prec)
                     preca.append(param_rec)
                     pacc.append(param_acc)
                     pfscore.append(param_fscore)
                     pmedR.append(param_medR)
-                    preca_k1.append(param_rec_k1)
-                    preca_k5.append(param_rec_k5)
-                    preca_k10.append(param_rec_k10)
+                    pRk1.append(param_Rk1)
+                    pRk5.append(param_Rk5)
+                    pRk10.append(param_Rk10)
+                    pAUC.append(param_AUC)
+                    pprec_k1.append(param_prec_k1)
+                    pprec_k5.append(param_prec_k5)
+                    pprec_k10.append(param_prec_k10)
+                    preca_k1.append(param_reca_k1)
+                    preca_k5.append(param_reca_k5)
+                    preca_k10.append(param_reca_k10)
+                    pacc_k1.append(param_acc_k1)
+                    pacc_k5.append(param_acc_k5)
+                    pacc_k10.append(param_acc_k10)
                     """
                     # print json values (converted from onehot to param interval values)
                     for i, tgt in enumerate(param_target):
@@ -867,366 +1131,219 @@ class Regressor:
                         }
                         # print("target "+str(target_json)+" pred "+str(output_json)+" batch "+str(bidx+1))
                     """
-                prec = np.nanmean(pprec)  # use mean or return separate precs?
-                rec = np.nanmean(preca)
-                acc = np.nanmean(pacc)
-                fscore = np.nanmean(pfscore)
-                medR = np.nanmean(pmedR)
-                rec_k1 = np.nanmean(preca_k1)
-                rec_k5 = np.nanmean(preca_k5)
-                rec_k10 = np.nanmean(preca_k10)
-                # Debug
-                if self.debug:
-                    print(
-                        "Batch("
-                        + str(bidx)
-                        + "/"
-                        + str(train_loader.__len__())
-                        + ")"
-                        + " Precision="
-                        + str(float(prec))
-                        + " Recall="
-                        + str(float(rec))
-                        + " Accuracy="
-                        + str(float(acc))
-                        + " F-Score="
-                        + str(float(fscore))
-                        + " medR="
-                        + str(float(medR))
-                        + " R@1="
-                        + str(float(rec_k1))
-                        + " R@5="
-                        + str(float(rec_k5))
-                        + " R@10="
-                        + str(float(rec_k10))
-                    )
-            precs = np.append(precs, prec)
-            recs = np.append(recs, rec)
-            accs = np.append(accs, acc)
-            fscores = np.append(fscores, fscore)
-            medRs = np.append(medRs, medR)
-            recs_k1 = np.append(recs_k1, rec_k1)
-            recs_k5 = np.append(recs_k5, rec_k5)
-            recs_k10 = np.append(recs_k10, rec_k10)
+                    if self.save_mat:
+                        pprediction.append(param_prediction)
+                        ptarget.append(param_target)
+
+                if self.save_mat:
+                    dict_data_batch["predictions"].append(
+                        pprediction
+                    )  # note: prediction before sigmoid
+                    dict_data_batch["targets"].append(ptarget)
+
+                # mean of each metric head
+                (
+                    prec,
+                    rec,
+                    acc,
+                    fscore,
+                    medR,
+                    Rk1,
+                    Rk5,
+                    Rk10,
+                    AUC,
+                    prec_k1,
+                    prec_k5,
+                    prec_k10,
+                    rec_k1,
+                    rec_k5,
+                    rec_k10,
+                    acc_k1,
+                    acc_k5,
+                    acc_k10,
+                ) = (
+                    np.nanmean(pprec),
+                    np.nanmean(preca),
+                    np.nanmean(pacc),
+                    np.nanmean(pfscore),
+                    np.nanmean(pmedR),
+                    np.nanmean(pRk1),
+                    np.nanmean(pRk5),
+                    np.nanmean(pRk10),
+                    np.nanmean(pAUC),
+                    np.nanmean(pprec_k1),
+                    np.nanmean(pprec_k5),
+                    np.nanmean(pprec_k10),
+                    np.nanmean(preca_k1),
+                    np.nanmean(preca_k5),
+                    np.nanmean(preca_k10),
+                    np.nanmean(pacc_k1),
+                    np.nanmean(pacc_k5),
+                    np.nanmean(pacc_k10),
+                )
+
+            # append results for each batch
+            (
+                dict_results_batch["precs"],
+                dict_results_batch["recs"],
+                dict_results_batch["accs"],
+                dict_results_batch["fscores"],
+                dict_results_batch["medRs"],
+                dict_results_batch["Rk1s"],
+                dict_results_batch["Rk5s"],
+                dict_results_batch["Rk10s"],
+                dict_results_batch["AUCs"],
+                dict_results_batch["precs_k1"],
+                dict_results_batch["precs_k5"],
+                dict_results_batch["precs_k10"],
+                dict_results_batch["recs_k1"],
+                dict_results_batch["recs_k5"],
+                dict_results_batch["recs_k10"],
+                dict_results_batch["accs_k1"],
+                dict_results_batch["accs_k5"],
+                dict_results_batch["accs_k10"],
+            ) = (
+                np.append(dict_results_batch["precs"], prec),
+                np.append(dict_results_batch["recs"], rec),
+                np.append(dict_results_batch["accs"], acc),
+                np.append(dict_results_batch["fscores"], fscore),
+                np.append(dict_results_batch["medRs"], medR),
+                np.append(dict_results_batch["Rk1s"], Rk1),
+                np.append(dict_results_batch["Rk5s"], Rk5),
+                np.append(dict_results_batch["Rk10s"], Rk10),
+                np.append(dict_results_batch["AUCs"], AUC),
+                np.append(dict_results_batch["precs_k1"], prec_k1),
+                np.append(dict_results_batch["precs_k5"], prec_k5),
+                np.append(dict_results_batch["precs_k10"], prec_k10),
+                np.append(dict_results_batch["recs_k1"], rec_k1),
+                np.append(dict_results_batch["recs_k5"], rec_k5),
+                np.append(dict_results_batch["recs_k10"], rec_k10),
+                np.append(dict_results_batch["accs_k1"], acc_k1),
+                np.append(dict_results_batch["accs_k5"], acc_k5),
+                np.append(dict_results_batch["accs_k10"], acc_k10),
+            )
             if self.cuda:
-                losses = np.append(losses, loss.data.cpu().numpy())
+                dict_results_batch["losses"] = np.append(
+                    dict_results_batch["losses"], loss.data.cpu().numpy()
+                )
             else:
-                losses = np.append(losses, loss.data.numpy())
+                dict_results_batch["losses"] = np.append(
+                    dict_results_batch["losses"], loss.data.numpy()
+                )
 
-            # backprop
-            self.optimizer.zero_grad()  # clear gradients for next train
-            loss.backward()  # backpropagation, compute gradients
-            self.optimizer.step()  # apply gradients
-
-            # print("Debug (check sigma intervals (one-hot encoding) of target and prediction)")
-            # print("Target=")
-            # print(target.squeeze())
-            # print("Prediction=")
-            # print(pred.squeeze())
-
-            filenames.append(filename)
-            ranks.append(rank)
-
-        epoch_loss = np.nanmean(losses)
-        epoch_prec = np.nanmean(precs)
-        epoch_rec = np.nanmean(recs)
-        epoch_acc = np.nanmean(accs)
-        epoch_fscore = np.nanmean(fscores)
-        epoch_medR = np.nanmean(medRs)
-        epoch_rec_k1 = np.nanmean(recs_k1)
-        epoch_rec_k5 = np.nanmean(recs_k5)
-        epoch_rec_k10 = np.nanmean(recs_k10)
-        print(
-            "Train Step = %d" % epoch
-            + " Loss = %.4f" % epoch_loss
-            + " Precision = %0.4f" % epoch_prec
-            + " Accuracy = %.4f" % epoch_acc
-            + " Recall = %.4f" % epoch_rec
-            + " Fscore = %.4f" % epoch_fscore
-            + " medR = %.4f" % epoch_medR
-            + " R@1 = %.4f" % epoch_rec_k1
-            + " R@5 = %.4f" % epoch_rec_k5
-            + " R@10 = %.4f" % epoch_rec_k10
-        )
-
-        # Get top and worst K crop filenames
-        filenames_stacked = np.array([col for row in filenames for col in row])
-        ranks_stacked = np.array([col for row in ranks for col in row])
-        order_ranks = np.argsort(ranks_stacked)
-        Ktop = self.batch_size  # default 32
-        topK = filenames_stacked[order_ranks][:Ktop]
-        worstK = filenames_stacked[order_ranks][::-1][:Ktop]
-        topK_ranks = ranks_stacked[order_ranks][:Ktop]
-        worstK_ranks = ranks_stacked[order_ranks][::-1][:Ktop]
-        return (
-            epoch_loss,
-            epoch_prec,
-            epoch_rec,
-            epoch_acc,
-            epoch_fscore,
-            epoch_medR,
-            epoch_rec_k1,
-            epoch_rec_k5,
-            epoch_rec_k10,
-            topK,
-            worstK,
-            topK_ranks,
-            worstK_ranks,
-        )
-
-    def validate(self, val_loader: Any, epoch: Any) -> Any:
-        with torch.no_grad():
-            # val
-            self.net.eval()  # val mode
-            losses = np.array([])
-            precs = np.array([])
-            recs = np.array([])
-            accs = np.array([])
-            fscores = np.array([])
-            medRs = np.array([])
-            recs_k1 = np.array([])
-            recs_k5 = np.array([])
-            recs_k10 = np.array([])
-            # xbatches=[x for bix,(x,y) in enumerate(val_loader)]
-            # ybatches=[y for bix,(x,y) in enumerate(val_loader)]
-            filenames = []
-            ranks = []
-            for bidx, (filename, param, x, y) in enumerate(val_loader):
-                # join regression batch for crops and modifiers
-                x.requires_grad = True
-                # transform sigmas to regression intervals (yreg)
-                param = [
-                    self.params[0] if par == "" else par for par in param
-                ]  # if param is empty, set to first param in params list
-                yreg = torch.stack(
+            # Debug batch results
+            if self.debug:
+                prefix = "Train " if validate is False else "Val "
+                print_debug_batch = "\t".join(
                     [
-                        torch.tensor(
-                            bisect_right(self.yclasses[param[i]], y[i]) - 1,
-                            dtype=torch.long,
-                        )
-                        for i in range(len(y))
+                        f"{key}={dict_results_batch[key][-1]:.3f}"
+                        for key in list(dict_results_batch.keys())
                     ]
                 )
-                yreg = Variable(yreg)
-                if self.cuda:
-                    yreg = yreg.cuda()
-                    x = x.cuda()
-                prediction = self.net(x)  # input x and predict based on x, [b,:,:,:]
-                if len(self.params) == 1:
-                    target = torch.eye(self.num_regs[0])[yreg]
-                    pred = torch.nn.Sigmoid()(prediction)
-                    if self.cuda:
-                        target = target.cuda()
-                    loss = self.criterion(pred, target)  # yreg as alternative (classes)
-                    # output to soft encoding (threshold output and compute) to get TP,FP...
-                    output_soft = soft2hard(prediction, self.soft_threshold)
-                    prec = get_precision(output_soft, target)
-                    rec = get_recall(output_soft, target)
-                    acc = get_accuracy(output_soft, target)
-                    fscore = get_fscore(output_soft, target)
-                    medR, rank = get_median_rank(prediction, target)
-                    rec_k1 = get_recall_rate(prediction, target, 1)
-                    rec_k5 = get_recall_rate(prediction, target, 5)
-                    rec_k10 = get_recall_rate(prediction, target, 10)
-                    # Debug
-                    if self.debug:
-                        print(
-                            "Batch("
-                            + str(bidx)
-                            + "/"
-                            + str(val_loader.__len__())
-                            + ")"
-                            + " Precision="
-                            + str(float(prec))
-                            + " Recall="
-                            + str(float(rec))
-                            + " Accuracy="
-                            + str(float(acc))
-                            + " F-Score="
-                            + str(float(fscore))
-                            + " medR="
-                            + str(float(medR))
-                            + " R@1="
-                            + str(float(rec_k1))
-                            + " R@5="
-                            + str(float(rec_k5))
-                            + " R@10="
-                            + str(float(rec_k10))
-                        )
-                    """
-                    par = self.params[0]
-                    for i, tgt in enumerate(target):
-                        output_json = {par: self.yclasses[par][prediction[i].argmax()]}
-                        target_json = {par: self.yclasses[par][target[i].argmax()]}
-                        # print("target "+str(target_json)+" pred "+str(output_json)+" batch "+str(bidx+1))
-                    """
-                else:
-                    # compute losses differently for each head
-                    loss = 0.0
-                    pprec = []
-                    preca = []
-                    pacc = []
-                    pfscore = []
-                    pmedR = []
-                    preca_k1 = []
-                    preca_k5 = []
-                    preca_k10 = []
-                    param_ids = [self.dict_params[par] for par in param]
-                    for pidx, par in enumerate(self.params):
-                        param_indices = [
-                            ppidx for ppidx, pid in enumerate(param_ids) if pid == pidx
-                        ]
+                print(
+                    prefix
+                    + "Step "
+                    + str(epoch)
+                    + " Batch "
+                    + str(bidx)
+                    + "/"
+                    + str(dataset_loader.__len__())
+                    + ": "
+                    + print_debug_batch
+                )
 
-                        if len(param_indices) == 0:
-                            continue
-                        param_yreg = yreg[param_indices]
-                        param_target = torch.eye(self.num_regs[pidx])[
-                            param_yreg
-                        ]  # one-hot encoding
-                        param_prediction = prediction[pidx][param_indices]
-                        param_pred = torch.nn.Sigmoid()(param_prediction)
-                        if self.cuda:
-                            param_target = param_target.cuda()
-                        param_loss = self.criterion(
-                            param_pred, param_target
-                        )  # one loss for each param
-                        loss += param_loss  # final loss is sum of all param BCE losses
+            # append filenames and ranks
+            dict_data_batch["filenames"].append(filename)
+            dict_data_batch["ranks"].append(rank)
 
-                        # output to soft encoding (threshold output and compute) to get TP,FP...
-                        output_soft = soft2hard(param_prediction, self.soft_threshold)
-                        param_prec = get_precision(output_soft, param_target)
-                        param_preca = get_recall(output_soft, param_target)
-                        param_pacc = get_accuracy(output_soft, param_target)
-                        param_pfscore = get_fscore(output_soft, param_target)
-                        param_medR, rank = get_median_rank(
-                            param_prediction, param_target
-                        )
-                        param_rec_k1 = get_recall_rate(
-                            param_prediction, param_target, 1
-                        )
-                        param_rec_k5 = get_recall_rate(
-                            param_prediction, param_target, 5
-                        )
-                        param_rec_k10 = get_recall_rate(
-                            param_prediction, param_target, 10
-                        )
-                        pprec.append(param_prec)
-                        preca.append(param_preca)
-                        pacc.append(param_pacc)
-                        pfscore.append(param_pfscore)
-                        pmedR.append(param_medR)
-                        preca_k1.append(param_rec_k1)
-                        preca_k5.append(param_rec_k5)
-                        preca_k10.append(param_rec_k10)
-                        """
-                        par = self.params[0]
-                        # print json values (converted from onehot to param interval values)
-                        for i, tgt in enumerate(param_target):
-                            output_json = {
-                                par: self.yclasses[par][param_pred[i].argmax()]
-                            }
-                            target_json = {
-                                par: self.yclasses[par][param_target[i].argmax()]
-                            }
-                            # print("target "+str(target_json)+" pred "+str(output_json)+" batch "+str(bidx+1))
-                        """
-                    prec = np.nanmean(pprec)
-                    rec = np.nanmean(preca)
-                    acc = np.nanmean(pacc)
-                    fscore = np.nanmean(pfscore)
-                    medR = np.nanmean(pmedR)
-                    rec_k1 = np.nanmean(preca_k1)
-                    rec_k5 = np.nanmean(preca_k5)
-                    rec_k10 = np.nanmean(preca_k10)
-                    # Debug
-                    if self.debug:
-                        print(
-                            "Batch("
-                            + str(bidx)
-                            + "/"
-                            + str(val_loader.__len__())
-                            + ")"
-                            + " Precision="
-                            + str(float(prec))
-                            + " Recall="
-                            + str(float(rec))
-                            + " Accuracy="
-                            + str(float(acc))
-                            + " F-Score="
-                            + str(float(fscore))
-                            + " medR="
-                            + str(float(medR))
-                            + " R@1="
-                            + str(float(rec_k1))
-                            + " R@5="
-                            + str(float(rec_k5))
-                            + " R@10="
-                            + str(float(rec_k10))
-                        )
-                precs = np.append(precs, prec)
-                recs = np.append(recs, rec)
-                accs = np.append(accs, acc)
-                fscores = np.append(fscores, fscore)
-                medRs = np.append(medRs, medR)
-                recs_k1 = np.append(recs_k1, rec_k1)
-                recs_k5 = np.append(recs_k5, rec_k5)
-                recs_k10 = np.append(recs_k10, rec_k10)
+            # backprop (train case only)
+            if validate is False:
+                self.optimizer.zero_grad()  # clear gradients for next train
+                loss.backward()  # backpropagation, compute gradients
+                self.optimizer.step()  # apply gradients
 
-                if self.cuda:
-                    losses = np.append(losses, loss.data.cpu().numpy())
-                else:
-                    losses = np.append(losses, loss.data.numpy())
-
-                filenames.append(filename)
-                ranks.append(rank)
-
-            epoch_loss = np.nanmean(losses)
-            epoch_prec = np.nanmean(precs)
-            epoch_rec = np.nanmean(recs)
-            epoch_acc = np.nanmean(accs)
-            epoch_fscore = np.nanmean(fscores)
-            epoch_medR = np.nanmean(medRs)
-            epoch_rec_k1 = np.nanmean(recs_k1)
-            epoch_rec_k5 = np.nanmean(recs_k5)
-            epoch_rec_k10 = np.nanmean(recs_k10)
-            print(
-                "Val Step = %d" % epoch
-                + " Loss = %.4f" % epoch_loss
-                + " Precision = %0.4f" % epoch_prec
-                + " Accuracy = %.4f" % epoch_acc
-                + " Recall = %.4f" % epoch_rec
-                + " Fscore = %.4f" % epoch_fscore
-                + " medR = %.4f" % epoch_medR
-                + " R@1 = %.4f" % epoch_rec_k1
-                + " R@5 = %.4f" % epoch_rec_k5
-                + " R@10 = %.4f" % epoch_rec_k10
+        # calc epoch results
+        if len(dict_results_batch["losses"]) > 0:
+            (
+                dict_results_epoch["epoch_loss"],
+                dict_results_epoch["epoch_prec"],
+                dict_results_epoch["epoch_rec"],
+                dict_results_epoch["epoch_acc"],
+                dict_results_epoch["epoch_fscore"],
+                dict_results_epoch["epoch_medR"],
+                dict_results_epoch["epoch_Rk1"],
+                dict_results_epoch["epoch_Rk5"],
+                dict_results_epoch["epoch_Rk10"],
+                dict_results_epoch["epoch_AUC"],
+                dict_results_epoch["epoch_prec_k1"],
+                dict_results_epoch["epoch_prec_k5"],
+                dict_results_epoch["epoch_prec_k10"],
+                dict_results_epoch["epoch_rec_k1"],
+                dict_results_epoch["epoch_rec_k5"],
+                dict_results_epoch["epoch_rec_k10"],
+                dict_results_epoch["epoch_acc_k1"],
+                dict_results_epoch["epoch_acc_k5"],
+                dict_results_epoch["epoch_acc_k10"],
+            ) = (
+                np.nanmean(dict_results_batch["losses"]),
+                np.nanmean(dict_results_batch["precs"]),
+                np.nanmean(dict_results_batch["recs"]),
+                np.nanmean(dict_results_batch["accs"]),
+                np.nanmean(dict_results_batch["fscores"]),
+                np.nanmean(dict_results_batch["medRs"]),
+                np.nanmean(dict_results_batch["Rk1s"]),
+                np.nanmean(dict_results_batch["Rk5s"]),
+                np.nanmean(dict_results_batch["Rk10s"]),
+                np.nanmean(dict_results_batch["AUCs"]),
+                np.nanmean(dict_results_batch["precs_k1"]),
+                np.nanmean(dict_results_batch["precs_k5"]),
+                np.nanmean(dict_results_batch["precs_k10"]),
+                np.nanmean(dict_results_batch["recs_k1"]),
+                np.nanmean(dict_results_batch["recs_k5"]),
+                np.nanmean(dict_results_batch["recs_k10"]),
+                np.nanmean(dict_results_batch["accs_k1"]),
+                np.nanmean(dict_results_batch["accs_k5"]),
+                np.nanmean(dict_results_batch["accs_k10"]),
             )
 
-            # Get top and worst K crop filenames
-            filenames_stacked = np.array([col for row in filenames for col in row])
-            ranks_stacked = np.array([col for row in ranks for col in row])
+        # print log
+        print_debug_epoch = "\t".join(
+            [
+                f"{key}={dict_results_epoch[key]:.3f}"
+                for key in list(dict_results_epoch.keys())
+            ]
+        )
+        prefix = "Train " if validate is False else "Val "
+        print(prefix + "Step " + str(epoch) + ": " + print_debug_epoch)
+
+        # Get top and worst K crop filenames
+        if self.debug:
+            filenames_stacked = np.array(
+                [col for row in dict_data_batch["filenames"] for col in row]
+            )
+            ranks_stacked = np.array(
+                [col for row in dict_data_batch["ranks"] for col in row]
+            )
             order_ranks = np.argsort(ranks_stacked)
             Ktop = self.batch_size  # default 32
-            topK = filenames_stacked[order_ranks][:Ktop]
-            worstK = filenames_stacked[order_ranks][::-1][:Ktop]
-            topK_ranks = ranks_stacked[order_ranks][:Ktop]
-            worstK_ranks = ranks_stacked[order_ranks][::-1][:Ktop]
+            dict_results_epoch["topK"] = filenames_stacked[order_ranks][:Ktop]
+            dict_results_epoch["worstK"] = filenames_stacked[order_ranks][::-1][:Ktop]
+            dict_results_epoch["topK_ranks"] = ranks_stacked[order_ranks][:Ktop]
+            dict_results_epoch["worstK_ranks"] = ranks_stacked[order_ranks][::-1][:Ktop]
+        else:
+            (
+                dict_results_epoch["topK"],
+                dict_results_epoch["worstK"],
+                dict_results_epoch["topK_ranks"],
+                dict_results_epoch["worstK_ranks"],
+            ) = ([], [], [], [])
 
-            return (
-                epoch_loss,
-                epoch_prec,
-                epoch_rec,
-                epoch_acc,
-                epoch_fscore,
-                epoch_medR,
-                epoch_rec_k1,
-                epoch_rec_k5,
-                epoch_rec_k10,
-                topK,
-                worstK,
-                topK_ranks,
-                worstK_ranks,
-            )
+        # clean memory if not debugging mats
+        if not self.save_mat:
+            dict_results_batch = {}
+            dict_data_batch = {}
+
+        return (dict_results_epoch, dict_results_batch, dict_data_batch)
 
 
 if __name__ == "__main__":
@@ -1237,46 +1354,25 @@ if __name__ == "__main__":
     reg = Regressor(args)
 
     # plot stats
-    stats_file = reg.output_path + "/" + "stats.csv"
-    if args.plot_only and os.path.exists(stats_file):
+    stats_file = os.path.join(reg.output_path, "stats.csv")
+    if args.plot_only is True or os.path.exists(stats_file):
         results_array = np.loadtxt(stats_file, delimiter=",")
-        diff_epoch = reg.epochs - len(results_array[0])
-        if diff_epoch > 0:
+        if len(np.shape(results_array)) == 2:
+            diff_epoch = reg.epochs - np.shape(results_array)[1]
+        else:
+            diff_epoch = -1  # file invalid (empty results file)
+        if diff_epoch == 0:
             print("Found " + stats_file + " plotting...")
             plot_single(reg.output_path)
             plot_benchmark(os.path.dirname(reg.output_path))
             exit()
         else:
             print("Found " + stats_file + " but not all epoch, re-training")
-            loaded_ckpt = reg.load_ckpt()
             args.resume = False  # train instead of deploy
             # reg.epochs = reg.epochs - diff_epoch # stats will not be appended so run all again
 
     # TRAIN+VAL (depending if checkpoint exists)
     if args.resume is False:
-        train_dataset = Dataset(
-            "train",
-            args.trainds,
-            args.traindsinput,
-            args.num_crops,
-            args.input_size,
-            args.splits[0],
-        )  # set num_crops as split proportion
-        train_dataset.__modify__(reg.ds_modifiers, args.overwrite_modifiers)
-        train_dataset.__crop__(args.overwrite_crops)
-        print(
-            "Prepared Train Dataset "
-            + "("
-            + str(train_dataset.__len__())
-            + ") images x modifiers x crops"
-        )
-        train_loader = torch.utils.data.DataLoader(
-            dataset=train_dataset,
-            batch_size=reg.batch_size,
-            shuffle=args.data_shuffle,
-            num_workers=args.workers,
-            pin_memory=True,
-        )
         val_dataset = Dataset(
             "test",
             args.valds,
@@ -1300,8 +1396,41 @@ if __name__ == "__main__":
             num_workers=args.workers,
             pin_memory=True,
         )
-        if args.data_only is True:
+        if (
+            args.validate_only is True and args.data_only is True
+        ):  # validate data only condition
             exit()
+        train_dataset = Dataset(
+            "train",
+            args.trainds,
+            args.traindsinput,
+            args.num_crops,
+            args.input_size,
+            args.splits[0],
+        )  # set num_crops as split proportion
+        train_dataset.__modify__(reg.ds_modifiers, args.overwrite_modifiers)
+        train_dataset.__crop__(args.overwrite_crops)
+        print(
+            "Prepared Train Dataset "
+            + "("
+            + str(train_dataset.__len__())
+            + ") images x modifiers x crops"
+        )
+        train_loader = torch.utils.data.DataLoader(
+            dataset=train_dataset,
+            batch_size=reg.batch_size,
+            shuffle=args.data_shuffle,
+            num_workers=args.workers,
+            pin_memory=True,
+        )
+        if args.data_only is True:  # data only condition
+            exit()
+        if (
+            os.path.exists(reg.checkpoint_path) is False
+        ):  # force train if checkpoint does not exist
+            reg.validate_only = False
+        else:  # load model if checkpoint exists
+            loaded_ckpt = reg.load_ckpt()
         # Train and validate regressor
         reg.train_val(train_loader, val_loader)
     else:

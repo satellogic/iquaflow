@@ -31,16 +31,28 @@ def plot_1d(
         "lime",
         "magenta",
     ]
+    # exit if values is empty or nan
+    if len(values) == 0:
+        return None
+    if np.isnan(np.nanmin(values)) or np.isnan(np.nanmax(values)):
+        return None
+    # limit and colors
     values[limit:] = []
     labels[limit:] = []
     labelsdiff = len(labels) - len(colors)
     for num in range(labelsdiff):
         colors.append(colors[-(len(colors) - num)])
+    # plot
     figs = []
     if plot_type == "bar":
         plt.bar(np.arange(len(values)), values, color=colors)
         plt.xticks(range(0, len(values)), labels, rotation=10, fontsize=6)
-        plt.ylim((np.min(values) - np.std(values), np.max(values) + np.std(values)))
+        plt.ylim(
+            (
+                np.nanmin(values) - np.nanstd(values),
+                np.nanmax(values) + np.nanstd(values),
+            )
+        )
     elif plot_type == "boxplot":
         fig = plt.boxplot(values)
         plt.xticks(range(0, len(values)), labels, rotation=10, fontsize=6)
@@ -51,7 +63,9 @@ def plot_1d(
         plt.legend(handles=figs, labels=labels)
         plt.xlabel(axes[0])
     plt.ylabel(axes[1])
-    plt.savefig(path + "/" + name + ".png")
+    # save figure and clean plt
+    plot_name = path + "/" + name + ".png"
+    plt.savefig(plot_name)
     plt.clf()
 
 
@@ -177,12 +191,32 @@ def plot_benchmark_whole(csv_files: List[str], output_path_root: str) -> None:
     val_fscores = []
     train_medRs = []
     val_medRs = []
+    train_Rk1s = []
+    val_Rk1s = []
+    train_Rk5s = []
+    val_Rk5s = []
+    train_Rk10s = []
+    val_Rk10s = []
+    train_AUCs = []
+    val_AUCs = []
+    train_precs_k1 = []
+    val_precs_k1 = []
+    train_precs_k5 = []
+    val_precs_k5 = []
+    train_precs_k10 = []
+    val_precs_k10 = []
     train_recs_k1 = []
     val_recs_k1 = []
     train_recs_k5 = []
     val_recs_k5 = []
     train_recs_k10 = []
     val_recs_k10 = []
+    train_accs_k1 = []
+    val_accs_k1 = []
+    train_accs_k5 = []
+    val_accs_k5 = []
+    train_accs_k10 = []
+    val_accs_k10 = []
     for file in csv_files:
         print("loading on benchmark: " + file)
         tag = os.path.basename(os.path.dirname(file))
@@ -212,20 +246,60 @@ def plot_benchmark_whole(csv_files: List[str], output_path_root: str) -> None:
             val_medRs.append(results_array[11])  # val_medRs
             dict_tags[tag].append("medR")
         if len(results_array) > 13:
-            train_recs_k1.append(results_array[12])  # train_recs_k1
-            val_recs_k1.append(results_array[13])  # val_recs_k1
+            train_Rk1s.append(results_array[12])  # train_Rk1s
+            val_Rk1s.append(results_array[13])  # val_Rk1s
             dict_tags[tag].append("R@1")
         if len(results_array) > 15:
-            train_recs_k5.append(results_array[14])  # train_recs_k5
-            val_recs_k5.append(results_array[15])  # val_recs_k5
+            train_Rk5s.append(results_array[14])  # train_Rk5s
+            val_Rk5s.append(results_array[15])  # val_Rk5s
             dict_tags[tag].append("R@5")
         if len(results_array) > 17:
-            train_recs_k10.append(results_array[16])  # train_recs_k10
-            val_recs_k10.append(results_array[17])  # val_recs_k10
+            train_Rk10s.append(results_array[16])  # train_Rk10s
+            val_Rk10s.append(results_array[17])  # val_Rk10s
             dict_tags[tag].append("R@10")
+        if len(results_array) > 19:
+            train_AUCs.append(results_array[18])  # train_AUCs
+            val_AUCs.append(results_array[19])  # val_AUCs
+            dict_tags[tag].append("AUC")
+        if len(results_array) > 21:
+            train_precs_k1.append(results_array[20])  # train_precs_k1
+            val_precs_k1.append(results_array[21])  # val_precs_k1
+            dict_tags[tag].append("Precision@1")
+        if len(results_array) > 23:
+            train_precs_k5.append(results_array[22])  # train_precs_k5
+            val_precs_k5.append(results_array[23])  # val_precs_k5
+            dict_tags[tag].append("Precision@5")
+        if len(results_array) > 25:
+            train_precs_k10.append(results_array[24])  # train_precs_k10
+            val_precs_k10.append(results_array[25])  # val_precs_k10
+            dict_tags[tag].append("Precision@10")
+        if len(results_array) > 27:
+            train_recs_k1.append(results_array[26])  # train_recs_k1
+            val_recs_k1.append(results_array[27])  # val_recs_k1
+            dict_tags[tag].append("Recall@1")
+        if len(results_array) > 29:
+            train_recs_k5.append(results_array[28])  # train_recs_k5
+            val_recs_k5.append(results_array[29])  # val_recs_k5
+            dict_tags[tag].append("Recall@5")
+        if len(results_array) > 31:
+            train_recs_k10.append(results_array[30])  # train_recs_k10
+            val_recs_k10.append(results_array[31])  # val_recs_k10
+            dict_tags[tag].append("Recall@10")
+        if len(results_array) > 33:
+            train_accs_k1.append(results_array[32])  # train_accs_k1
+            val_accs_k1.append(results_array[33])  # val_accs_k1
+            dict_tags[tag].append("Accuracy@1")
+        if len(results_array) > 35:
+            train_accs_k5.append(results_array[34])  # train_accs_k5
+            val_accs_k5.append(results_array[35])  # val_accs_k5
+            dict_tags[tag].append("Accuracy@5")
+        if len(results_array) > 37:
+            train_accs_k10.append(results_array[36])  # train_accs_k10
+            val_accs_k10.append(results_array[37])  # val_accs_k10
+            dict_tags[tag].append("Accuracy@10")
     tags = list(dict_tags.keys())
     # Line plots per epoch
-    if len(train_losses):
+    if len(train_losses) or len(val_losses):
         tags_idx = [idx for idx, tag in enumerate(tags) if "Loss" in dict_tags[tag]]
         selected_tags = list(np.asarray(tags)[tags_idx])
         plot_parameter(
@@ -235,8 +309,7 @@ def plot_benchmark_whole(csv_files: List[str], output_path_root: str) -> None:
             tags=selected_tags,
             output_path=output_path_root,
         )
-
-    if len(train_precs):
+    if len(train_precs) or len(val_precs):
         tags_idx = [
             idx for idx, tag in enumerate(tags) if "Precision" in dict_tags[tag]
         ]
@@ -249,7 +322,7 @@ def plot_benchmark_whole(csv_files: List[str], output_path_root: str) -> None:
             output_path=output_path_root,
         )
 
-    if len(train_recs):
+    if len(train_recs) or len(val_recs):
         tags_idx = [idx for idx, tag in enumerate(tags) if "Recall" in dict_tags[tag]]
         selected_tags = list(np.asarray(tags)[tags_idx])
         plot_parameter(
@@ -260,7 +333,7 @@ def plot_benchmark_whole(csv_files: List[str], output_path_root: str) -> None:
             output_path=output_path_root,
         )
 
-    if len(train_accs):
+    if len(train_accs) or len(val_accs):
         tags_idx = [idx for idx, tag in enumerate(tags) if "Accuracy" in dict_tags[tag]]
         selected_tags = list(np.asarray(tags)[tags_idx])
         plot_parameter(
@@ -271,7 +344,7 @@ def plot_benchmark_whole(csv_files: List[str], output_path_root: str) -> None:
             output_path=output_path_root,
         )
 
-    if len(train_fscores):
+    if len(train_fscores) or len(val_fscores):
         tags_idx = [idx for idx, tag in enumerate(tags) if "Fscore" in dict_tags[tag]]
         selected_tags = list(np.asarray(tags)[tags_idx])
         plot_parameter(
@@ -281,7 +354,7 @@ def plot_benchmark_whole(csv_files: List[str], output_path_root: str) -> None:
             tags=selected_tags,
             output_path=output_path_root,
         )
-    if len(train_medRs):
+    if len(train_medRs) or len(val_medRs):
         tags_idx = [idx for idx, tag in enumerate(tags) if "medR" in dict_tags[tag]]
         selected_tags = list(np.asarray(tags)[tags_idx])
         plot_parameter(
@@ -291,33 +364,149 @@ def plot_benchmark_whole(csv_files: List[str], output_path_root: str) -> None:
             tags=selected_tags,
             output_path=output_path_root,
         )
-    if len(train_recs_k1):
+    if len(train_Rk1s) or len(val_Rk1s):
         tags_idx = [idx for idx, tag in enumerate(tags) if "R@1" in dict_tags[tag]]
         selected_tags = list(np.asarray(tags)[tags_idx])
         plot_parameter(
             parameter_name="R@1",
+            train_values=train_Rk1s,
+            val_values=val_Rk1s,
+            tags=selected_tags,
+            output_path=output_path_root,
+        )
+    if len(train_Rk5s) or len(val_Rk5s):
+        tags_idx = [idx for idx, tag in enumerate(tags) if "R@5" in dict_tags[tag]]
+        selected_tags = list(np.asarray(tags)[tags_idx])
+        plot_parameter(
+            parameter_name="R@5",
+            train_values=train_Rk5s,
+            val_values=val_Rk5s,
+            tags=selected_tags,
+            output_path=output_path_root,
+        )
+    if len(train_Rk10s) or len(val_Rk10s):
+        tags_idx = [idx for idx, tag in enumerate(tags) if "R@10" in dict_tags[tag]]
+        selected_tags = list(np.asarray(tags)[tags_idx])
+        plot_parameter(
+            parameter_name="R@10",
+            train_values=train_Rk10s,
+            val_values=val_Rk10s,
+            tags=selected_tags,
+            output_path=output_path_root,
+        )
+    if len(train_AUCs) or len(val_AUCs):
+        tags_idx = [idx for idx, tag in enumerate(tags) if "AUC" in dict_tags[tag]]
+        selected_tags = list(np.asarray(tags)[tags_idx])
+        plot_parameter(
+            parameter_name="AUC",
+            train_values=train_AUCs,
+            val_values=val_AUCs,
+            tags=selected_tags,
+            output_path=output_path_root,
+        )
+    if len(train_precs_k1) or len(val_precs_k1):
+        tags_idx = [
+            idx for idx, tag in enumerate(tags) if "Precision@1" in dict_tags[tag]
+        ]
+        selected_tags = list(np.asarray(tags)[tags_idx])
+        plot_parameter(
+            parameter_name="Precision@1",
+            train_values=train_precs_k1,
+            val_values=val_precs_k1,
+            tags=selected_tags,
+            output_path=output_path_root,
+        )
+    if len(train_precs_k5) or len(val_precs_k5):
+        tags_idx = [
+            idx for idx, tag in enumerate(tags) if "Precision@5" in dict_tags[tag]
+        ]
+        selected_tags = list(np.asarray(tags)[tags_idx])
+        plot_parameter(
+            parameter_name="Precision@5",
+            train_values=train_precs_k5,
+            val_values=val_precs_k5,
+            tags=selected_tags,
+            output_path=output_path_root,
+        )
+    if len(train_precs_k10) or len(val_precs_k10):
+        tags_idx = [
+            idx for idx, tag in enumerate(tags) if "Precision@10" in dict_tags[tag]
+        ]
+        selected_tags = list(np.asarray(tags)[tags_idx])
+        plot_parameter(
+            parameter_name="Precision@10",
+            train_values=train_precs_k10,
+            val_values=val_precs_k10,
+            tags=selected_tags,
+            output_path=output_path_root,
+        )
+
+    if len(train_recs_k1) or len(val_recs_k1):
+        tags_idx = [idx for idx, tag in enumerate(tags) if "Recall@1" in dict_tags[tag]]
+        selected_tags = list(np.asarray(tags)[tags_idx])
+        plot_parameter(
+            parameter_name="Recall@1",
             train_values=train_recs_k1,
             val_values=val_recs_k1,
             tags=selected_tags,
             output_path=output_path_root,
         )
-    if len(train_recs_k5):
-        tags_idx = [idx for idx, tag in enumerate(tags) if "R@5" in dict_tags[tag]]
+    if len(train_recs_k5) or len(val_recs_k5):
+        tags_idx = [idx for idx, tag in enumerate(tags) if "Recall@5" in dict_tags[tag]]
         selected_tags = list(np.asarray(tags)[tags_idx])
         plot_parameter(
-            parameter_name="R@5",
+            parameter_name="Recall@5",
             train_values=train_recs_k5,
             val_values=val_recs_k5,
             tags=selected_tags,
             output_path=output_path_root,
         )
-    if len(train_recs_k10):
-        tags_idx = [idx for idx, tag in enumerate(tags) if "R@10" in dict_tags[tag]]
+    if len(train_recs_k10) or len(val_recs_k10):
+        tags_idx = [
+            idx for idx, tag in enumerate(tags) if "Recall@10" in dict_tags[tag]
+        ]
         selected_tags = list(np.asarray(tags)[tags_idx])
         plot_parameter(
-            parameter_name="R@10",
+            parameter_name="Recall@10",
             train_values=train_recs_k10,
             val_values=val_recs_k10,
+            tags=selected_tags,
+            output_path=output_path_root,
+        )
+
+    if len(train_accs_k1) or len(val_accs_k1):
+        tags_idx = [
+            idx for idx, tag in enumerate(tags) if "Accuracy@1" in dict_tags[tag]
+        ]
+        selected_tags = list(np.asarray(tags)[tags_idx])
+        plot_parameter(
+            parameter_name="Accuracy@1",
+            train_values=train_accs_k1,
+            val_values=val_accs_k1,
+            tags=selected_tags,
+            output_path=output_path_root,
+        )
+    if len(train_accs_k5) or len(val_accs_k5):
+        tags_idx = [
+            idx for idx, tag in enumerate(tags) if "Accuracy@5" in dict_tags[tag]
+        ]
+        selected_tags = list(np.asarray(tags)[tags_idx])
+        plot_parameter(
+            parameter_name="Accuracy@5",
+            train_values=train_accs_k5,
+            val_values=val_accs_k5,
+            tags=selected_tags,
+            output_path=output_path_root,
+        )
+    if len(train_accs_k10) or len(val_accs_k10):
+        tags_idx = [
+            idx for idx, tag in enumerate(tags) if "Accuracy@10" in dict_tags[tag]
+        ]
+        selected_tags = list(np.asarray(tags)[tags_idx])
+        plot_parameter(
+            parameter_name="Accuracy@10",
+            train_values=train_accs_k10,
+            val_values=val_accs_k10,
             tags=selected_tags,
             output_path=output_path_root,
         )
