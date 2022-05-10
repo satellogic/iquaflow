@@ -61,6 +61,7 @@ def parse_params_cfg(default_cfg_path: str = "config.cfg") -> Any:
     parser.add_argument("--gpus", type=str, default="0")
     parser.add_argument("--seed", type=str, default=str(np.random.randint(12345)))
     parser.add_argument("--debug", default=False, action="store_true")
+    parser.add_argument("--save_mat", default=False, action="store_true")
     parser.add_argument(
         "--resume",
         default=False,
@@ -358,11 +359,14 @@ class Regressor:
             self.output_path, self.checkpoint_name
         )  # add join names for params
 
+        # DEBUG Options
+        self.debug = args.debug
+        self.save_mat = args.save_mat
+
         # GPU Options
         self.cuda = args.cuda
         self.gpus = args.gpus
         self.seed = args.seed
-        self.debug = args.debug
         if self.cuda:
             print("=> use gpu id: '{}'".format(self.gpus))
             os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
@@ -657,7 +661,7 @@ class Regressor:
                 ),
                 delimiter=",",
             )
-            if self.debug:
+            if self.save_mat:
                 dict_results_batch_pkl = os.path.join(
                     self.output_path, f"results_epoch{epoch}.pkl"
                 )
@@ -923,7 +927,7 @@ class Regressor:
 
         # validate_only case, exit if training
         if validate is False and self.validate_only is True:
-            return (dict_results_epoch, dict_results_batch)
+            return (dict_results_epoch, dict_results_batch, dict_data_batch)
 
         # join regression batch for crops and modifiers
         # xbatches=[x for bix,(x,y) in enumerate(dataset_loader)]
@@ -987,7 +991,7 @@ class Regressor:
                     target_json = {par: self.yclasses[par][target[i].argmax()]}
                     # print("target "+str(target_json)+" pred "+str(output_json)+" batch "+str(bidx+1))
                 """
-                if self.debug:
+                if self.save_mat:
                     dict_data_batch["predictions"].append(
                         prediction
                     )  # note: prediction before sigmoid
@@ -1123,11 +1127,11 @@ class Regressor:
                         }
                         # print("target "+str(target_json)+" pred "+str(output_json)+" batch "+str(bidx+1))
                     """
-                    if self.debug:
+                    if self.save_mat:
                         pprediction.append(param_prediction)
                         ptarget.append(param_target)
 
-                if self.debug:
+                if self.save_mat:
                     dict_data_batch["predictions"].append(
                         pprediction
                     )  # note: prediction before sigmoid
@@ -1228,7 +1232,7 @@ class Regressor:
                 prefix = "Train " if validate is False else "Val "
                 print_debug_batch = "\t".join(
                     [
-                        f"{key}={dict_results_batch[key][-1]}"
+                        f"{key}={dict_results_batch[key][-1]:.3f}"
                         for key in list(dict_results_batch.keys())
                     ]
                 )
@@ -1301,7 +1305,7 @@ class Regressor:
         # print log
         print_debug_epoch = "\t".join(
             [
-                f"{key}={dict_results_epoch[key]}"
+                f"{key}={dict_results_epoch[key]:.3f}"
                 for key in list(dict_results_epoch.keys())
             ]
         )
@@ -1329,6 +1333,11 @@ class Regressor:
                 dict_results_epoch["topK_ranks"],
                 dict_results_epoch["worstK_ranks"],
             ) = ([], [], [], [])
+
+        # clean memory if not debugging mats
+        if not self.save_mat:
+            dict_results_batch = {}
+            dict_data_batch = {}
 
         return (dict_results_epoch, dict_results_batch, dict_data_batch)
 
