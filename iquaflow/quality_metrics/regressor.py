@@ -546,31 +546,31 @@ class Regressor:
                 train_dict_results_epoch["epoch_AUC"]
             )
             train_dict_results_whole["precs_k1"].append(
-                train_dict_results_epoch["epoch_precs_k1"]
+                train_dict_results_epoch["epoch_prec_k1"]
             )
             train_dict_results_whole["precs_k5"].append(
-                train_dict_results_epoch["epoch_precs_k5"]
+                train_dict_results_epoch["epoch_prec_k5"]
             )
             train_dict_results_whole["precs_k10"].append(
-                train_dict_results_epoch["epoch_precs_k10"]
+                train_dict_results_epoch["epoch_prec_k10"]
             )
             train_dict_results_whole["recs_k1"].append(
-                train_dict_results_epoch["epoch_recs_k1"]
+                train_dict_results_epoch["epoch_rec_k1"]
             )
             train_dict_results_whole["recs_k5"].append(
-                train_dict_results_epoch["epoch_recs_k5"]
+                train_dict_results_epoch["epoch_rec_k5"]
             )
             train_dict_results_whole["recs_k10"].append(
-                train_dict_results_epoch["epoch_recs_k10"]
+                train_dict_results_epoch["epoch_rec_k10"]
             )
             train_dict_results_whole["accs_k1"].append(
-                train_dict_results_epoch["epoch_accs_k1"]
+                train_dict_results_epoch["epoch_acc_k1"]
             )
             train_dict_results_whole["accs_k5"].append(
-                train_dict_results_epoch["epoch_accs_k5"]
+                train_dict_results_epoch["epoch_acc_k5"]
             )
             train_dict_results_whole["accs_k10"].append(
-                train_dict_results_epoch["epoch_accs_k10"]
+                train_dict_results_epoch["epoch_acc_k10"]
             )
             val_dict_results_whole["losses"].append(
                 val_dict_results_epoch["epoch_loss"]
@@ -587,34 +587,38 @@ class Regressor:
             val_dict_results_whole["Rk10s"].append(val_dict_results_epoch["epoch_Rk10"])
             val_dict_results_whole["AUCs"].append(val_dict_results_epoch["epoch_AUC"])
             val_dict_results_whole["precs_k1"].append(
-                val_dict_results_epoch["epoch_precs_k1"]
+                val_dict_results_epoch["epoch_prec_k1"]
             )
             val_dict_results_whole["precs_k5"].append(
-                val_dict_results_epoch["epoch_precs_k5"]
+                val_dict_results_epoch["epoch_prec_k5"]
             )
             val_dict_results_whole["precs_k10"].append(
-                val_dict_results_epoch["epoch_precs_k10"]
+                val_dict_results_epoch["epoch_prec_k10"]
             )
             val_dict_results_whole["recs_k1"].append(
-                val_dict_results_epoch["epoch_recs_k1"]
+                val_dict_results_epoch["epoch_rec_k1"]
             )
             val_dict_results_whole["recs_k5"].append(
-                val_dict_results_epoch["epoch_recs_k5"]
+                val_dict_results_epoch["epoch_rec_k5"]
             )
             val_dict_results_whole["recs_k10"].append(
-                val_dict_results_epoch["epoch_recs_k10"]
+                val_dict_results_epoch["epoch_rec_k10"]
             )
             val_dict_results_whole["accs_k1"].append(
-                val_dict_results_epoch["epoch_accs_k1"]
+                val_dict_results_epoch["epoch_acc_k1"]
             )
             val_dict_results_whole["accs_k5"].append(
-                val_dict_results_epoch["epoch_accs_k5"]
+                val_dict_results_epoch["epoch_acc_k5"]
             )
             val_dict_results_whole["accs_k10"].append(
-                val_dict_results_epoch["epoch_accs_k10"]
+                val_dict_results_epoch["epoch_acc_k10"]
             )
 
-            # save csv and pkl
+            # save pkl
+            dict_results_epoch_pkl = os.path.join(self.output_path, "results.pkl")
+            with open(dict_results_epoch_pkl, "wb") as f:
+                pickle.dump([train_dict_results_whole, val_dict_results_whole], f)
+            # save csv
             np.savetxt(
                 os.path.join(self.output_path, "stats.csv"),
                 np.asarray(
@@ -649,8 +653,8 @@ class Regressor:
                         val_dict_results_whole["recs_k1"],
                         train_dict_results_whole["recs_k5"],
                         val_dict_results_whole["recs_k5"],
-                        train_dict_results_whole["recs_10"],
-                        val_dict_results_whole["recs_10"],
+                        train_dict_results_whole["recs_k10"],
+                        val_dict_results_whole["recs_k10"],
                         train_dict_results_whole["accs_k1"],
                         val_dict_results_whole["accs_k1"],
                         train_dict_results_whole["accs_k5"],
