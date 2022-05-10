@@ -9,11 +9,11 @@ import numpy as np
 from scipy.ndimage.interpolation import rotate
 
 from iquaflow.datasets import DSModifier, DSWrapper
-from iquaflow.datasets.modifier_rer import BlurImage
+from iquaflow.datasets.modifier_rer import DSModifier_rer
 from iquaflow.experiments import ExperimentInfo, ExperimentSetup
 from iquaflow.experiments.task_execution import PythonScriptTaskExecution
-from iquaflow.metrics import BBDetectionMetrics, RERMetric, SNRMetric
-from iquaflow.metrics.rer_metric import MTF, RERfunctions
+from iquaflow.metrics import BBDetectionMetrics, SharpnessMetric, SNRMetric
+#from iquaflow.metrics.rer_metric import MTF, RERfunctions
 
 results_1 = [
     1.0,
@@ -69,7 +69,7 @@ class TestExperimentInfo:
         experiment_info = ExperimentInfo(experiment_name)
         # metrics
         metric_1 = BBDetectionMetrics()
-        metric_2 = RERMetric(experiment_info, win=1024, ext="jpg")
+        metric_2 = SharpnessMetric(experiment_info,  ext="jpg")
         # apply metrics
         experiment_info.apply_metric_per_run(metric_1, str(ds_wrapper.json_annotations))
         experiment_info.apply_metric_per_run(metric_2, str(ds_wrapper.json_annotations))
@@ -98,45 +98,100 @@ image_edge[:, : np.int(image_size / 2)] = np.int(image_val / 2)
 desired_rer = random.uniform(0.3, 0.5)
 
 
-class TestRER:
+class TestSharpness:
     """Applies a known, random amount of blur, then checks that
     resulting RER value is close to expected value.
 
     Does not test robustness in accounting for image content.
     """
 
-    def rer_is_reasonable(self, rer_value: np.float) -> Any:
-        # return desired_rer - rer_buffer < rer_value < desired_rer + rer_buffer
-        return "float" in type(rer_value).__name__ or rer_value is None
+    def test_sharpness_blurred_image(self):
+        expected_results_in_coco_ds = {
+            "RER_X": 0.55,
+            "RER_Y": 0.565,
+            "RER_other": 0.57,
+            "FWHM_X": 1.57,
+            "FWHM_Y": 1.50,
+            "FWHM_other": 1.48,
+            "MTF_NYQ_X": 0.176,
+            "MTF_NYQ_Y": 0.194,
+            "MTF_NYQ_other": 0.20,
+            "MTF_halfNYQ_X": 0.54,
+            "MTF_halfNYQ_Y": 0.56,
+            "MTF_halfNYQ_other": 0.56,
+        }
 
-    def test_experiment_info_class(self):
-        rot_angle = random.randint(1, 10)
-        # trim array to remove edge effects
-        trim_len = np.int((np.sqrt(2) * image_size - image_size) / 2)
-        rotated_image = rotate(image_edge, angle=rot_angle)[
-            trim_len:-trim_len, trim_len:-trim_len
-        ]
-        mtf = MTF()
-        rer_funcs = RERfunctions(sr_edge_factor=4)
+        expected_results_in_coco_ds_after_blur = {
+            "RER_X": 0.36,
+            "RER_Y": 0.36,
+            "RER_other": 0.36,
+            "FWHM_X": 2.43,
+            "FWHM_Y": 2.43,
+            "FWHM_other": 2.445,
+            "MTF_NYQ_X": 0.028,
+            "MTF_NYQ_Y": 0.028,
+            "MTF_NYQ_other": 0.029,
+            "MTF_halfNYQ_X": 0.248,
+            "MTF_halfNYQ_Y": 0.25,
+            "MTF_halfNYQ_other": 0.247,
+        }
 
-        list_of_images = [rotated_image]
-        original_rer = rer_funcs.rer(mtf, list_of_images)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            new_data_path = os.path.join(tmp_dir, "ds")
+            shutil.copytree(data_path, new_data_path)
 
-        blur = BlurImage(kernel_size=kernel_size)
-        blurred_image = blur.apply_blur_to_image(
-            np.stack([rotated_image for _ in range(3)], axis=2),
-            image_RER=original_rer,
-            desired_RER=desired_rer,
-        )
-        # trim array to remove edge effects
-        trim_len = np.int(kernel_size / 2)
-        list_of_images = [blurred_image[trim_len:-trim_len, trim_len:-trim_len, 0]]
-        rer_value = rer_funcs.rer(mtf, list_of_images)
+            ds_wrapper = DSWrapper(data_path=new_data_path)
+            ds_modifiers_list = [DSModifier(), DSModifier_rer(params={'initial_rer': 0.55, 'rer': 0.3})]
+            task = PythonScriptTaskExecution(model_script_path=python_ml_script_path)
+            experiment = ExperimentSetup(
+                experiment_name="metric_test",
+                task_instance=task,
+                ref_dsw_train=ds_wrapper,
+                ds_modifiers_list=ds_modifiers_list,
+            )
+            experiment.execute()
+            experiment_info = ExperimentInfo("metric_test")
+            np.random.seed(42)
+            metric_sharpness = SharpnessMetric(experiment_info, ext="jpg", metrics=['RER', 'FWHM', 'MTF'], parallel=False)
 
-        assert self.rer_is_reasonable(
-            rer_value
-        ), f"RER is not reasonable, expected {desired_rer} but got {rer_value}"
+            assert (
+                    metric_sharpness.ext == "jpg"
+            ), f"Unexpected ext for metric snr. It was set to jpg and it is {metric_sharpness.ext}"
 
+            assert all(
+                [
+                    n in metric_sharpness.metric_names
+                    for n in list(expected_results_in_coco_ds.keys())
+                ]
+            ), f"Unexpected metric_sharpness.metric_names: {metric_sharpness.metric_names}"
+            assert hasattr(
+                metric_sharpness, "apply"
+            ), 'Missing method "apply" required in IQF-Metric'
+            experiment_info.apply_metric_per_run(
+                metric_sharpness, str(ds_wrapper.json_annotations)
+            )
+            run_name = "ds#base_modifier"
+            myrun = experiment_info.runs[run_name]
+            for key in expected_results_in_coco_ds:
+                assert key in metric_sharpness.metric_names, f"Missing name {key}"
+                assert (
+                        key in myrun["metrics_dict"]
+                ), f"Missing metric {key} in the results"
+                assert (
+                    abs(expected_results_in_coco_ds[key] - myrun["metrics_dict"][key]) < 0.1
+                ), f"Unexpected result for  {key} ({myrun['metrics_dict'][key]})"
+
+            run_name = "ds#rer0.3_modifier"
+            myrun = experiment_info.runs[run_name]
+
+            for key in expected_results_in_coco_ds_after_blur:
+                assert key in metric_sharpness.metric_names, f"Missing name {key}"
+                assert (
+                        key in myrun["metrics_dict"]
+                ), f"Missing metric {key} in the results"
+                assert (
+                        abs(expected_results_in_coco_ds_after_blur[key] - myrun["metrics_dict"][key]) < 0.01
+                ), f"Unexpected result for  {key} ({myrun['metrics_dict'][key]})"
 
 class TestSNR:
     """
