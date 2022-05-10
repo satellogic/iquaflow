@@ -269,7 +269,7 @@ class MultiHead_ResNet(torch.nn.Module):
     def __init__(
         self,
         network: torch.nn.Module = models.resnet18(pretrained=True),
-        *heads: torch.nn.Module
+        *heads: torch.nn.Module,
     ) -> None:
         super().__init__()
         self.network = network
@@ -334,7 +334,7 @@ class Regressor:
                 *[
                     torch.nn.Linear(512, self.num_regs[idx])
                     for idx in range(len(self.params))
-                ]
+                ],
             )
             # self.net=models.resnet18(pretrained=True)
             # self.net.fc=MultiHead(*[torch.nn.Linear(512, self.num_regs[idx]) for idx in range(len(self.params))])
@@ -430,13 +430,17 @@ class Regressor:
 
         for epoch in range(self.epochs):  # epoch
             # TRAIN
-            train_dict_results_epoch, train_dict_results = self.train_val_epoch(
-                train_loader, epoch, False
-            )
+            (
+                train_dict_results_epoch,
+                train_dict_results_batch,
+                train_dict_data_batch,
+            ) = self.train_val_epoch(train_loader, epoch, False)
             # VALIDATE
-            val_dict_results_epoch, val_dict_results = self.train_val_epoch(
-                val_loader, epoch, True
-            )
+            (
+                val_dict_results_epoch,
+                val_dict_results_batch,
+                val_dict_data_batch,
+            ) = self.train_val_epoch(val_loader, epoch, True)
 
             # CHECK BEST EPOCH CHECKPOINT
             if (
@@ -659,9 +663,18 @@ class Regressor:
                 ),
                 delimiter=",",
             )
-            dict_batch_pkl = os.path.join(self.output_path, "stats.pkl")
-            with open(dict_batch_pkl, "wb") as f:
-                pickle.dump([train_dict_results, val_dict_results], f)
+            if self.debug:
+                dict_results_batch_pkl = os.path.join(
+                    self.output_path, f"results_epoch{epoch}.pkl"
+                )
+                with open(dict_results_batch_pkl, "wb") as f:
+                    pickle.dump([train_dict_results_batch, val_dict_results_batch], f)
+                dict_data_batch_pkl = os.path.join(
+                    self.output_path, f"data_epoch{epoch}.pkl"
+                )
+                with open(dict_data_batch_pkl, "wb") as f:
+                    pickle.dump([train_dict_data_batch, val_dict_data_batch], f)
+
         plot_single(self.output_path)
         # plot_benchmark(os.path.dirname(self.output_path))
 
@@ -893,9 +906,18 @@ class Regressor:
             np.nan,
             np.nan,
         )
-        filenames = []
-        ranks = []
-        outputs = []
+        dict_data_batch = {}  # type: ignore
+        (
+            dict_data_batch["filenames"],
+            dict_data_batch["ranks"],
+            dict_data_batch["predictions"],
+            dict_data_batch["targets"],
+        ) = (
+            [],
+            [],
+            [],
+            [],
+        )
 
         # set training type (gradients)
         if validate is False:
@@ -934,8 +956,6 @@ class Regressor:
                 yreg = yreg.cuda()
                 x = x.cuda()
             prediction = self.net(x)  # input x and predict based on x, [b,:,:,:]
-            if self.debug:
-                outputs.append(prediction)
 
             # calculate prediction metrics
             if len(self.params) == 1:  # single head
@@ -973,6 +993,11 @@ class Regressor:
                     target_json = {par: self.yclasses[par][target[i].argmax()]}
                     # print("target "+str(target_json)+" pred "+str(output_json)+" batch "+str(bidx+1))
                 """
+                if self.debug:
+                    dict_data_batch["predictions"].append(
+                        prediction
+                    )  # note: prediction before sigmoid
+                    dict_data_batch["targets"].append(target)
             else:  # multihead
                 loss = 0.0  # compute losses differently for each head
                 (
@@ -1015,7 +1040,8 @@ class Regressor:
                     [],
                 )
                 param_ids = [self.dict_params[par] for par in param]
-                poutputs = []
+                pprediction = []
+                ptarget = []
                 for pidx, par in enumerate(self.params):
                     param_indices = [
                         ppidx for ppidx, pid in enumerate(param_ids) if pid == pidx
@@ -1036,9 +1062,6 @@ class Regressor:
 
                     loss += param_loss  # final loss is sum of all param BCE losses
                     # todo: check if this loss computation works, or losses need to be adapted to each param/head?
-
-                    if self.debug:
-                        poutputs.append(param_prediction)
 
                     # output encoding (threshold output and compute) to get TP,FP...
                     output_hard = soft2hard(param_prediction, self.soft_threshold)
@@ -1106,8 +1129,15 @@ class Regressor:
                         }
                         # print("target "+str(target_json)+" pred "+str(output_json)+" batch "+str(bidx+1))
                     """
+                    if self.debug:
+                        pprediction.append(param_prediction)
+                        ptarget.append(param_target)
+
                 if self.debug:
-                    outputs.append(poutputs)
+                    dict_data_batch["predictions"].append(
+                        pprediction
+                    )  # note: prediction before sigmoid
+                    dict_data_batch["targets"].append(ptarget)
 
                 # mean of each metric head
                 (
@@ -1214,8 +1244,8 @@ class Regressor:
                 )
 
             # append filenames and ranks
-            filenames.append(filename)
-            ranks.append(rank)
+            dict_data_batch["filenames"].append(filename)
+            dict_data_batch["ranks"].append(rank)
 
             # backprop (train case only)
             if validate is False:
@@ -1274,8 +1304,12 @@ class Regressor:
 
         # Get top and worst K crop filenames
         if self.debug:
-            filenames_stacked = np.array([col for row in filenames for col in row])
-            ranks_stacked = np.array([col for row in ranks for col in row])
+            filenames_stacked = np.array(
+                [col for row in dict_data_batch["filenames"] for col in row]
+            )
+            ranks_stacked = np.array(
+                [col for row in dict_data_batch["ranks"] for col in row]
+            )
             order_ranks = np.argsort(ranks_stacked)
             Ktop = self.batch_size  # default 32
             dict_results_epoch["topK"] = filenames_stacked[order_ranks][:Ktop]
@@ -1290,7 +1324,7 @@ class Regressor:
                 dict_results_epoch["worstK_ranks"],
             ) = ([], [], [], [])
 
-        return (dict_results_epoch, dict_results_batch)
+        return (dict_results_epoch, dict_results_batch, dict_data_batch)
 
 
 if __name__ == "__main__":
