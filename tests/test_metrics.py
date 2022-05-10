@@ -13,7 +13,6 @@ from iquaflow.datasets.modifier_rer import DSModifier_rer
 from iquaflow.experiments import ExperimentInfo, ExperimentSetup
 from iquaflow.experiments.task_execution import PythonScriptTaskExecution
 from iquaflow.metrics import BBDetectionMetrics, SharpnessMetric, SNRMetric
-#from iquaflow.metrics.rer_metric import MTF, RERfunctions
 
 results_1 = [
     1.0,
@@ -69,7 +68,7 @@ class TestExperimentInfo:
         experiment_info = ExperimentInfo(experiment_name)
         # metrics
         metric_1 = BBDetectionMetrics()
-        metric_2 = SharpnessMetric(experiment_info,  ext="jpg")
+        metric_2 = SharpnessMetric(experiment_info, ext="jpg")
         # apply metrics
         experiment_info.apply_metric_per_run(metric_1, str(ds_wrapper.json_annotations))
         experiment_info.apply_metric_per_run(metric_2, str(ds_wrapper.json_annotations))
@@ -106,34 +105,35 @@ class TestSharpness:
     """
 
     def test_sharpness_blurred_image(self):
+
         expected_results_in_coco_ds = {
             "RER_X": 0.55,
-            "RER_Y": 0.565,
-            "RER_other": 0.57,
-            "FWHM_X": 1.57,
-            "FWHM_Y": 1.50,
-            "FWHM_other": 1.48,
-            "MTF_NYQ_X": 0.176,
-            "MTF_NYQ_Y": 0.194,
-            "MTF_NYQ_other": 0.20,
-            "MTF_halfNYQ_X": 0.54,
-            "MTF_halfNYQ_Y": 0.56,
-            "MTF_halfNYQ_other": 0.56,
+            "RER_Y": 0.55,
+            "RER_other": 0.56,
+            "FWHM_X": 1.58,
+            "FWHM_Y": 1.58,
+            "FWHM_other": 1.57,
+            "MTF_NYQ_X": 0.181,
+            "MTF_NYQ_Y": 0.177,
+            "MTF_NYQ_other": 0.192,
+            "MTF_halfNYQ_X": 0.53,
+            "MTF_halfNYQ_Y": 0.53,
+            "MTF_halfNYQ_other": 0.55,
         }
 
         expected_results_in_coco_ds_after_blur = {
-            "RER_X": 0.36,
-            "RER_Y": 0.36,
-            "RER_other": 0.36,
-            "FWHM_X": 2.43,
-            "FWHM_Y": 2.43,
-            "FWHM_other": 2.445,
-            "MTF_NYQ_X": 0.028,
-            "MTF_NYQ_Y": 0.028,
-            "MTF_NYQ_other": 0.029,
-            "MTF_halfNYQ_X": 0.248,
-            "MTF_halfNYQ_Y": 0.25,
-            "MTF_halfNYQ_other": 0.247,
+            "RER_X": 0.354,
+            "RER_Y": 0.351,
+            "RER_other": 0.348,
+            "FWHM_X": 2.46,
+            "FWHM_Y": 2.49,
+            "FWHM_other": 2.52,
+            "MTF_NYQ_X": 0.022,
+            "MTF_NYQ_Y": 0.023,
+            "MTF_NYQ_other": 0.022,
+            "MTF_halfNYQ_X": 0.24,
+            "MTF_halfNYQ_Y": 0.23,
+            "MTF_halfNYQ_other": 0.23,
         }
 
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -141,7 +141,10 @@ class TestSharpness:
             shutil.copytree(data_path, new_data_path)
 
             ds_wrapper = DSWrapper(data_path=new_data_path)
-            ds_modifiers_list = [DSModifier(), DSModifier_rer(params={'initial_rer': 0.55, 'rer': 0.3})]
+            ds_modifiers_list = [
+                DSModifier(),
+                DSModifier_rer(params={"initial_rer": 0.55, "rer": 0.3}),
+            ]
             task = PythonScriptTaskExecution(model_script_path=python_ml_script_path)
             experiment = ExperimentSetup(
                 experiment_name="metric_test",
@@ -152,10 +155,12 @@ class TestSharpness:
             experiment.execute()
             experiment_info = ExperimentInfo("metric_test")
             np.random.seed(42)
-            metric_sharpness = SharpnessMetric(experiment_info, ext="jpg", metrics=['RER', 'FWHM', 'MTF'], parallel=False)
+            metric_sharpness = SharpnessMetric(
+                experiment_info, ext="jpg", metrics=["RER", "FWHM", "MTF"]
+            )
 
             assert (
-                    metric_sharpness.ext == "jpg"
+                metric_sharpness.ext == "jpg"
             ), f"Unexpected ext for metric snr. It was set to jpg and it is {metric_sharpness.ext}"
 
             assert all(
@@ -175,10 +180,12 @@ class TestSharpness:
             for key in expected_results_in_coco_ds:
                 assert key in metric_sharpness.metric_names, f"Missing name {key}"
                 assert (
-                        key in myrun["metrics_dict"]
+                    key in myrun["metrics_dict"]
                 ), f"Missing metric {key} in the results"
                 assert (
-                    abs(expected_results_in_coco_ds[key] - myrun["metrics_dict"][key]) < 0.1
+                    abs(expected_results_in_coco_ds[key] - myrun["metrics_dict"][key])
+                    / expected_results_in_coco_ds[key]
+                    < 0.1
                 ), f"Unexpected result for  {key} ({myrun['metrics_dict'][key]})"
 
             run_name = "ds#rer0.3_modifier"
@@ -187,11 +194,17 @@ class TestSharpness:
             for key in expected_results_in_coco_ds_after_blur:
                 assert key in metric_sharpness.metric_names, f"Missing name {key}"
                 assert (
-                        key in myrun["metrics_dict"]
+                    key in myrun["metrics_dict"]
                 ), f"Missing metric {key} in the results"
                 assert (
-                        abs(expected_results_in_coco_ds_after_blur[key] - myrun["metrics_dict"][key]) < 0.01
+                    abs(
+                        expected_results_in_coco_ds_after_blur[key]
+                        - myrun["metrics_dict"][key]
+                    )
+                    / expected_results_in_coco_ds_after_blur[key]
+                    < 0.1
                 ), f"Unexpected result for  {key} ({myrun['metrics_dict'][key]})"
+
 
 class TestSNR:
     """

@@ -1,22 +1,25 @@
+import os
+from glob import glob
+from typing import Any, Dict, List, Optional, Tuple
+
+import cv2
+import matplotlib.pyplot as plt
+import numpy as np
+import rasterio
+from joblib import Parallel, delayed
 from scipy import ndimage
 from scipy.fft import fft, fftfreq
 from scipy.interpolate import CubicSpline, UnivariateSpline, interp1d
 from scipy.optimize import curve_fit
-from skimage import feature
-from skimage.transform import probabilistic_hough_line
 from shapely.geometry import LineString, MultiPoint
 from shapely.ops import snap
-import cv2
-from  glob import glob
-from joblib import Parallel, delayed
-import matplotlib.pyplot as plt
-import numpy as np
-import os
-import rasterio
-from typing import Any,  Dict, List, Optional, Tuple
+from skimage import feature
+from skimage.transform import probabilistic_hough_line
+
 from iquaflow.metrics import Metric
 
 DEBUG_DIR = "./rer_debug"
+
 
 def model_esf(x, a, b, c, d):
     """
@@ -27,12 +30,13 @@ def model_esf(x, a, b, c, d):
     except FloatingPointError or RuntimeWarning:
         pass
 
-def gaussian(x,a,x0,sigma):
-    return a*np.exp(-(x-x0)**2/(2*sigma**2))
+
+def gaussian(x, a, x0, sigma):
+    return a * np.exp(-((x - x0) ** 2) / (2 * sigma**2))
 
 
 class SharpnessMeasure:
-    """"
+    """ "
     Measures the sharpness of an image.
     The implementation is mainly based of the paper of Cenci, L. et al. 2021: "Presenting a Semi-Automatic,
     Statistically-Based Approach to Assess the Sharpness Level of Optical Images from Natural Targets via the Edge
@@ -40,20 +44,25 @@ class SharpnessMeasure:
 
     We thank Luca Cenci and Valerio Pampanoni for their advise.
     """
-    def __init__(self,
-                 window_size: int = None,
-                 stride: int = None,
-                 edge_length: int = 5,
-                 edge_distance: int = 10,
-                 contrast_params: Dict = {'channel 0': {'alpha': 1.2, 'beta': 0.3, 'gamma': 1.2}},
-                 pixels_sampled: int = None,
-                 r2_threshold: float = 0.995,
-                 snr_threshold: float = 100,
-                 get_rer: bool = True,
-                 get_fwhm: bool = True,
-                 get_mtf: bool = False,
-                 debug: bool = False,
-                 calculate_mean = False) -> None:
+
+    def __init__(
+        self,
+        window_size: int = None,
+        stride: int = None,
+        edge_length: int = 5,
+        edge_distance: int = 10,
+        contrast_params: Dict = {
+            "channel 0": {"alpha": 1.2, "beta": 0.3, "gamma": 1.2}
+        },
+        pixels_sampled: int = None,
+        r2_threshold: float = 0.995,
+        snr_threshold: float = 50,
+        get_rer: bool = True,
+        get_fwhm: bool = True,
+        get_mtf: bool = False,
+        debug: bool = False,
+        calculate_mean=False,
+    ) -> None:
 
         """
         The implementation needs several parameters, where the best value can be quite different depending on the source
@@ -81,14 +90,18 @@ class SharpnessMeasure:
 
         """
 
-        self.window_size = window_size,
+        self.window_size = (window_size,)
         self.stride = self.window_size if stride is None else stride
         self.edge_length = edge_length
         self.edge_distance = edge_distance
-        assert 'channel 0' in contrast_params.keys()
-        assert 'alpha' in contrast_params['channel 0'].keys()
+        assert "channel 0" in contrast_params.keys()
+        assert "alpha" in contrast_params["channel 0"].keys()
         self.contrast_params = contrast_params
-        self.pixels_sampled = int((self.edge_length+6)//2 +1) if pixels_sampled is None else pixels_sampled
+        self.pixels_sampled = (
+            int((self.edge_length + 6) // 2 + 1)
+            if pixels_sampled is None
+            else pixels_sampled
+        )
         assert self.pixels_sampled >= 5
         self.r2_threshold = r2_threshold
         self.snr_threshold = snr_threshold
@@ -114,19 +127,23 @@ class SharpnessMeasure:
         if len(image.shape) > 2:
             for i in range(image.shape[2]):
                 if f"channel {i}" in self.contrast_params.keys():
-                    alpha = self.contrast_params[f"channel {i}"]['alpha']
-                    beta = self.contrast_params[f"channel {i}"]['beta']
-                    gamma = self.contrast_params[f"channel {i}"]['gamma']
+                    alpha = self.contrast_params[f"channel {i}"]["alpha"]
+                    beta = self.contrast_params[f"channel {i}"]["beta"]
+                    gamma = self.contrast_params[f"channel {i}"]["gamma"]
                 else:
-                    alpha = self.contrast_params[f"channel 0"]['alpha']
-                    beta = self.contrast_params[f"channel 0"]['beta']
-                    gamma = self.contrast_params[f"channel 0"]['gamma']
-                results[f"channel {i}"] =  self.apply_to_one_channel(image[:, :, i], (alpha, beta, gamma))
+                    alpha = self.contrast_params[f"channel 0"]["alpha"]
+                    beta = self.contrast_params[f"channel 0"]["beta"]
+                    gamma = self.contrast_params[f"channel 0"]["gamma"]
+                results[f"channel {i}"] = self.apply_to_one_channel(
+                    image[:, :, i], (alpha, beta, gamma)
+                )
         else:
-            alpha = self.contrast_params[f"channel 0"]['alpha']
-            beta = self.contrast_params[f"channel 0"]['beta']
-            gamma = self.contrast_params[f"channel 0"]['gamma']
-            results["channel 0"] = self.apply_to_one_channel(image, (alpha, beta, gamma))
+            alpha = self.contrast_params[f"channel 0"]["alpha"]
+            beta = self.contrast_params[f"channel 0"]["beta"]
+            gamma = self.contrast_params[f"channel 0"]["gamma"]
+            results["channel 0"] = self.apply_to_one_channel(
+                image, (alpha, beta, gamma)
+            )
 
         # Calculate mean values of the metrics across channels
         if self.calculate_mean:
@@ -136,23 +153,28 @@ class SharpnessMeasure:
                     for direction, v in value.items():
                         k = f"{metric}_{direction}"
                         if k in out.keys():
-                            out[k][0].append(v['mean'])
-                            out[k][1].append(v['std'])
+                            out[k][0].append(v["mean"])
+                            out[k][1].append(v["std"])
                         else:
-                            out[k] = [[v['mean']], [v['std']]]
-            results['mean'] = {}
-            for k,v in out.items():
-                if len(v[0])<=1:
-                    results['mean'][k] = (v[0][0], v[1][0])
+                            out[k] = [[v["mean"]], [v["std"]]]
+            results["mean"] = {}
+            for k, v in out.items():
+                if len(v[0]) <= 1:
+                    results["mean"][k] = (v[0][0], v[1][0])
                 else:
                     v0 = np.array(v[0])
                     v1 = np.array(v[1])
-                    results['mean'][k] = (np.nanmean(v0), max(np.sqrt(np.sum(v1[~np.isnan(v1)] ** 2))/ len(v1[~np.isnan(v1)]), np.nanstd(v1)))
+                    results["mean"][k] = (
+                        np.nanmean(v0),
+                        max(
+                            np.sqrt(np.sum(v1[~np.isnan(v1)] ** 2))
+                            / len(v1[~np.isnan(v1)]),
+                            np.nanstd(v1),
+                        ),
+                    )
         return results
 
-    def apply_to_one_channel(self,
-                             image: np.array,
-                             patch_params: Tuple) -> Dict:
+    def apply_to_one_channel(self, image: np.array, patch_params: Tuple) -> Dict:
         """
         Runs the measurement one image channel at the the time.
         The following steps are executed:
@@ -165,18 +187,18 @@ class SharpnessMeasure:
         :param patch_params:
         :return:
         """
-        assert len(image.shape)<3
+        assert len(image.shape) < 3
 
         output = {}
         if self.get_rer:
-            output['RER'] = {}
+            output["RER"] = {}
 
         if self.get_fwhm:
-            output['FWHM'] = {}
+            output["FWHM"] = {}
 
         if self.get_mtf:
-            output['MTF_NYQ'] = {}
-            output['MTF_halfNYQ'] = {}
+            output["MTF_NYQ"] = {}
+            output["MTF_halfNYQ"] = {}
 
         final_good_lines = {}
 
@@ -187,14 +209,22 @@ class SharpnessMeasure:
         vertical, horizontal, other = self.sort_angles(lines)
 
         # Find patches that are in agreement with the contrast parameters
-        vertical_patches, horizontal_patches, other_patches, good_lines = self.find_good_patches(image, vertical,
-                                                                                                 horizontal, other,
-                                                                                                 patch_params)
+        (
+            vertical_patches,
+            horizontal_patches,
+            other_patches,
+            good_lines,
+        ) = self.find_good_patches(image, vertical, horizontal, other, patch_params)
         # Rotate horizontal patches
         horizontal_patches = [np.rot90(p) for p in horizontal_patches]
 
-        for i, (patches, kind, k) in enumerate(zip([vertical_patches, horizontal_patches, other_patches],
-                                                ['vertical', 'horizontal', 'other'], ['X', 'Y', 'other'])):
+        for i, (patches, kind, k) in enumerate(
+            zip(
+                [vertical_patches, horizontal_patches, other_patches],
+                ["vertical", "horizontal", "other"],
+                ["X", "Y", "other"],
+            )
+        ):
 
             self.edge_snrs.append([])
             # Create edge_list
@@ -204,37 +234,44 @@ class SharpnessMeasure:
                 rer = self.calculate_rer(edge_list)
 
                 if rer is not None:
-                    output['RER'][k] = {'mean': np.mean(rer),
-                                        'std': np.std(rer),
-                                        'length': np.size(rer),
-                                        'median': np.median(rer),
-                                        'IQR': np.subtract(*np.percentile(rer, [75, 25]))}
+                    output["RER"][k] = {
+                        "mean": np.mean(rer),
+                        "std": np.std(rer),
+                        "length": np.size(rer),
+                        "median": np.median(rer),
+                        "IQR": np.subtract(*np.percentile(rer, [75, 25])),
+                    }
 
             # Calculate FWHM
             if self.get_fwhm:
                 fwhm = self.calculate_fwhm(edge_list)
 
                 if fwhm is not None:
-                    output['FWHM'][k] = {'mean': np.mean(fwhm),
-                                        'std': np.std(fwhm),
-                                        'length': np.size(fwhm),
-                                        'median': np.median(fwhm),
-                                        'IQR': np.subtract(*np.percentile(fwhm, [75, 25]))}
+                    output["FWHM"][k] = {
+                        "mean": np.mean(fwhm),
+                        "std": np.std(fwhm),
+                        "length": np.size(fwhm),
+                        "median": np.median(fwhm),
+                        "IQR": np.subtract(*np.percentile(fwhm, [75, 25])),
+                    }
             # Calculate MTF
             if self.get_mtf:
                 mtf = self.calculate_mtf(edge_list)
                 if mtf is not None:
-                    output['MTF_NYQ'][k] = {'mean': np.mean(mtf[0]),
-                                                'std': np.std(mtf[0]),
-                                                'length': np.size(mtf[0]),
-                                                'median': np.median(mtf[0]),
-                                                'IQR': np.subtract(*np.percentile(mtf[0], [75, 25]))}
-                    output['MTF_halfNYQ'][k] = {'mean': np.mean(mtf[1]),
-                                                    'std': np.std(mtf[1]),
-                                                    'length': np.size(mtf[1]),
-                                                    'median': np.median(mtf[1]),
-                                                    'IQR': np.subtract(*np.percentile(mtf[1], [75, 25]))}
-
+                    output["MTF_NYQ"][k] = {
+                        "mean": np.mean(mtf[0]),
+                        "std": np.std(mtf[0]),
+                        "length": np.size(mtf[0]),
+                        "median": np.median(mtf[0]),
+                        "IQR": np.subtract(*np.percentile(mtf[0], [75, 25])),
+                    }
+                    output["MTF_halfNYQ"][k] = {
+                        "mean": np.mean(mtf[1]),
+                        "std": np.std(mtf[1]),
+                        "length": np.size(mtf[1]),
+                        "median": np.median(mtf[1]),
+                        "IQR": np.subtract(*np.percentile(mtf[1], [75, 25])),
+                    }
 
         # if self.debug:
         #     self._plot_good_patches(image, vertical_patches, horizontal_patches, other_patches, lines, good_lines)
@@ -258,9 +295,15 @@ class SharpnessMeasure:
         else:
             for i in range(0, im_height, self.stride[0]):
                 for j in range(0, im_width, self.stride[0]):
-                    image_window = image[i:min(i+self.window_size[0], image.shape[0]), j:min(j+self.window_size[0], image.shape[1])]
+                    image_window = image[
+                        i : min(i + self.window_size[0], image.shape[0]),
+                        j : min(j + self.window_size[0], image.shape[1]),
+                    ]
                     # if the window mostly contain np.nan values, don't run the edge detector
-                    if np.isnan(image_window).sum()>=0.8*image_window.shape[0]*image_window.shape[1]:
+                    if (
+                        np.isnan(image_window).sum()
+                        >= 0.8 * image_window.shape[0] * image_window.shape[1]
+                    ):
                         continue
 
                     lines_ = self.edge_detector(image_window)
@@ -268,12 +311,14 @@ class SharpnessMeasure:
                         continue
                     # Correct the line coordinates to correspond to the coordinates of the whole image instead of the window.
 
-                    lines_[:,0::2] += j
-                    lines_[:,1::2] += i
+                    lines_[:, 0::2] += j
+                    lines_[:, 1::2] += i
                     lines = np.concatenate([lines, lines_], axis=0)
         return lines
 
-    def edge_detector(self, image: np.array, threshold: int=15, line_gap: int=0) -> np.array:
+    def edge_detector(
+        self, image: np.array, threshold: int = 15, line_gap: int = 0
+    ) -> np.array:
         """
         Runs the canny edge detector to find edges, then uses the Hough transform to find straight lines with the
         given parameters.
@@ -285,15 +330,21 @@ class SharpnessMeasure:
         Return:
             numpy array with the line coordinates
         """
-        canny = feature.canny(image, sigma=1, low_threshold = np.nanquantile(image, 0.99) * 0.1,
-                              high_threshold = np.nanquantile(image, 0.99) * 0.25)
+        canny = feature.canny(
+            image,
+            sigma=1,
+            low_threshold=np.nanquantile(image, 0.99) * 0.1,
+            high_threshold=np.nanquantile(image, 0.99) * 0.25,
+        )
         # List of lines identified, lines in format ((x0, y0), (x1, y1)), indicating line start and end
-        lines = probabilistic_hough_line(canny,
-                                         threshold=threshold,
-                                         line_length=self.edge_length,
-                                         line_gap=line_gap,
-                                         seed=42,
-                                         theta=np.linspace(-np.pi / 2, np.pi / 2, 360*1, endpoint=False))
+        lines = probabilistic_hough_line(
+            canny,
+            threshold=threshold,
+            line_length=self.edge_length,
+            line_gap=line_gap,
+            seed=42,
+            theta=np.linspace(-np.pi / 2, np.pi / 2, 360 * 1, endpoint=False),
+        )
 
         if len(lines) == 0:
             return None
@@ -314,13 +365,20 @@ class SharpnessMeasure:
         lines_ = [LineString(list(l)) for l in lines]
         for line in lines_:
             for j in range(self.edge_length):
-                splitter = MultiPoint([line.interpolate(j + (self.edge_length * i)) for i in range(int(line.length // self.edge_length + 1))])
+                splitter = MultiPoint(
+                    [
+                        line.interpolate(j + (self.edge_length * i))
+                        for i in range(int(line.length // self.edge_length + 1))
+                    ]
+                )
                 cuts = snap(line, splitter, 1e-5)
                 for i in range(1, len(cuts.coords)):
-                    x0, y0 = round(cuts.coords.xy[0][i - 1]), round(cuts.coords.xy[1][i - 1])
+                    x0, y0 = round(cuts.coords.xy[0][i - 1]), round(
+                        cuts.coords.xy[1][i - 1]
+                    )
                     x1, y1 = round(cuts.coords.xy[0][i]), round(cuts.coords.xy[1][i])
-                    ll = LineString([(x0,y0),(x1, y1)])
-                    if ll.length >= self.edge_length-1e-5:
+                    ll = LineString([(x0, y0), (x1, y1)])
+                    if ll.length >= self.edge_length - 1e-5:
                         good_lines.append([x0, y0, x1, y1])
         return np.array(good_lines)
 
@@ -355,7 +413,14 @@ class SharpnessMeasure:
                 other.append(coords)
         return (vertical, horizontal, other)
 
-    def find_good_patches(self, image: np.array, vertical: List, horizontal: List, other: List, params: Tuple) -> Tuple:
+    def find_good_patches(
+        self,
+        image: np.array,
+        vertical: List,
+        horizontal: List,
+        other: List,
+        params: Tuple,
+    ) -> Tuple:
         """
         Takes the line lists, for each line cuts a patch around the line. Then it checks if the patch complies with the
         contrast conditions defined by the parameters. If it complies, it adds the patch to the patch list.
@@ -377,7 +442,7 @@ class SharpnessMeasure:
         np.random.shuffle(horizontal)
         np.random.shuffle(other)
 
-        for lines, kind in zip([vertical, horizontal, other], ['v', 'h', 'o']):
+        for lines, kind in zip([vertical, horizontal, other], ["v", "h", "o"]):
             masked_image = image.copy()
             for i, l in enumerate(lines):
                 # adapt to array indexing
@@ -387,43 +452,68 @@ class SharpnessMeasure:
                 y1, y2 = int(min(y1_, y2_)), int(max(y1_, y2_))
 
                 # make sure the line is not too close to the image edge
-                if x1 < 2*self.pixels_sampled or \
-                        y1 < 2*self.pixels_sampled or \
-                        x2 > image.shape[0] - 2*self.pixels_sampled or \
-                        y2 > image.shape[1] - 2*self.pixels_sampled:
+                if (
+                    x1 < 2 * self.pixels_sampled
+                    or y1 < 2 * self.pixels_sampled
+                    or x2 > image.shape[0] - 2 * self.pixels_sampled
+                    or y2 > image.shape[1] - 2 * self.pixels_sampled
+                ):
                     continue
 
-                if kind == 'v':
+                if kind == "v":
                     # for vertical lines the patch size is (line length + 6, 2*self.pixels_sampled)
-                    patch = masked_image[x1 - 3:x1 + self.edge_length + 3, y1 - self.pixels_sampled:y1  + self.pixels_sampled+1].copy()
+                    patch = masked_image[
+                        x1 - 3 : x1 + self.edge_length + 3,
+                        y1 - self.pixels_sampled : y1 + self.pixels_sampled + 1,
+                    ].copy()
 
                     # sample the dark and bright sides of the edge
-                    DN1 = patch[3:-3, :self.pixels_sampled - 1]
-                    DN2 = patch[3:-3, -(self.pixels_sampled - 1):]
+                    DN1 = patch[3:-3, : self.pixels_sampled - 1]
+                    DN2 = patch[3:-3, -(self.pixels_sampled - 1) :]
 
-                elif kind == 'h':
+                elif kind == "h":
                     # for horizontal lines the patch size is (2*self.pixels_sampled, line length + 6)
-                    patch = masked_image[x1 - self.pixels_sampled:x1  + self.pixels_sampled+1, y1 - 3:y1 + self.edge_length + 4].copy()
+                    patch = masked_image[
+                        x1 - self.pixels_sampled : x1 + self.pixels_sampled + 1,
+                        y1 - 3 : y1 + self.edge_length + 4,
+                    ].copy()
                     # sample the dark and bright sides of the edge
-                    DN1 = patch[:self.pixels_sampled - 1, 3:-3]
-                    DN2 = patch[-(self.pixels_sampled - 1):, 3:-3]
+                    DN1 = patch[: self.pixels_sampled - 1, 3:-3]
+                    DN2 = patch[-(self.pixels_sampled - 1) :, 3:-3]
                 else:
                     # for other angles, first a patch of (4*self.pixels_sampled, 4*self.pixels_sampled) is cut
                     # than the patch is rotated by the angle of theta to make it vertical
-                    p = masked_image[x1 - 2 * self.pixels_sampled:x2 + 2 * self.pixels_sampled+1, y1 - 2 * self.pixels_sampled:y2 + 2 * self.pixels_sampled+1].copy()
+                    p = masked_image[
+                        x1 - 2 * self.pixels_sampled : x2 + 2 * self.pixels_sampled + 1,
+                        y1 - 2 * self.pixels_sampled : y2 + 2 * self.pixels_sampled + 1,
+                    ].copy()
                     p_rot = ndimage.rotate(p, -theta)
                     _norm = np.linalg.norm([x2 - x1, y2 - y1])
-                    patch = p_rot[p_rot.shape[0] // 2 - int(_norm/2) - 3:p_rot.shape[0] // 2 + int(_norm/2) + 4,
-                            p_rot.shape[1] // 2 - self.pixels_sampled:p_rot.shape[1] // 2 + self.pixels_sampled+1]
+                    patch = p_rot[
+                        p_rot.shape[0] // 2
+                        - int(_norm / 2)
+                        - 3 : p_rot.shape[0] // 2
+                        + int(_norm / 2)
+                        + 4,
+                        p_rot.shape[1] // 2
+                        - self.pixels_sampled : p_rot.shape[1] // 2
+                        + self.pixels_sampled
+                        + 1,
+                    ]
 
-                    DN1 = patch[3:-3, :self.pixels_sampled - 1]
-                    DN2 = patch[3:-3, -(self.pixels_sampled - 1):]
+                    DN1 = patch[3:-3, : self.pixels_sampled - 1]
+                    DN2 = patch[3:-3, -(self.pixels_sampled - 1) :]
 
                 # print(np.isnan(patch).any())
                 if np.isnan(patch).any():
                     continue
 
-                if DN1.shape[0] == 0 or DN2.shape[0] == 0 or np.isnan(DN1).sum()>0 or  np.isnan(DN2).sum()>1:
+                if (
+                    DN1.shape[0] == 0
+                    or DN2.shape[0] == 0
+                    or np.isnan(DN1).sum() > 0
+                    or np.isnan(DN2).sum() > 1
+                ):
                     continue
 
                 if np.mean(DN1) > np.mean(DN2):
@@ -433,22 +523,22 @@ class SharpnessMeasure:
                     DNb = DN2
                     DNd = DN1
 
-
                 # Check if patch complies contrast conditions
-                if np.mean(DNb) / np.mean(DNd) > alpha and \
-                        np.std(DNb) / np.std(patch) < beta and \
-                        np.std(DNd) / np.std(patch) < beta and \
-                        np.quantile(DNb, 0.1) / np.quantile(DNd, 0.9) > gamma:
+                if (
+                    np.mean(DNb) / np.mean(DNd) > alpha
+                    and np.std(DNb) / np.std(patch) < beta
+                    and np.std(DNd) / np.std(patch) < beta
+                    and np.quantile(DNb, 0.1) / np.quantile(DNd, 0.9) > gamma
+                ):
 
                     # set nearby pixel values to nan in order to sample edges too close to each other
                     d = self.edge_distance // 2
-                    masked_image[x1 - d:x2 + d, y1 - d:y2 + d] = np.nan
+                    masked_image[x1 - d : x2 + d, y1 - d : y2 + d] = np.nan
 
-
-                    if kind == 'v':
+                    if kind == "v":
                         vertical_patches.append(patch)
 
-                    elif kind == 'h':
+                    elif kind == "h":
                         horizontal_patches.append(patch)
 
                     else:
@@ -457,16 +547,18 @@ class SharpnessMeasure:
                     good_lines.append(l)
         return (vertical_patches, horizontal_patches, other_patches, good_lines)
 
-    def _plot_good_patches(self, image, v_patches, h_patches, o_patches, lines, good_lines):
-        fig, ax = plt.subplots(figsize=(100,100))
+    def _plot_good_patches(
+        self, image, v_patches, h_patches, o_patches, lines, good_lines
+    ):
+        fig, ax = plt.subplots(figsize=(100, 100))
         ax.imshow(image)
         print(f"good: {len(good_lines[-1])}")
         for l in lines:
             x1, y1, x2, y2 = l
-            ax.plot([x1, x2], [y1, y2], color='black', linewidth=2)
+            ax.plot([x1, x2], [y1, y2], color="black", linewidth=2)
         for l in good_lines:
             x1, x2, y1, y2, _ = l
-            ax.plot([x1, x2], [y1, y2], color='red', linewidth=2)
+            ax.plot([x1, x2], [y1, y2], color="red", linewidth=2)
 
         fn = "good_lines.png"
         fig.savefig(os.path.join(DEBUG_DIR, fn))
@@ -524,9 +616,7 @@ class SharpnessMeasure:
         edge_coeffs = np.poly1d(np.polyfit(list(range(len(points))), points, 1))
         return edge_coeffs
 
-    def compute_esf(self,
-                    patch: np.array,
-                    edge_coeffs):
+    def compute_esf(self, patch: np.array, edge_coeffs):
         """
         Constructs the ESF, the normalized ESF, and the LSF, checks their quality, and fits the theoretical functions.
         :param patch:
@@ -534,7 +624,7 @@ class SharpnessMeasure:
         :return:
         """
         # Check if edge is in the correct list
-        if abs(90-np.rad2deg(np.arctan(edge_coeffs[0]))) > 15:
+        if abs(90 - np.rad2deg(np.arctan(edge_coeffs[0]))) > 15:
             return None
         patch_h, patch_w = patch.shape
 
@@ -551,7 +641,13 @@ class SharpnessMeasure:
 
         # Calculate the Y coordinates of each the sampling points of each of the transects
         transect_fit = np.array(
-            [np.polynomial.Polynomial([k - (-edge_coeffs[1] * edge_coeffs[0]), -edge_coeffs[1]])(x1) for k in x2])
+            [
+                np.polynomial.Polynomial(
+                    [k - (-edge_coeffs[1] * edge_coeffs[0]), -edge_coeffs[1]]
+                )(x1)
+                for k in x2
+            ]
+        )
 
         # Calculate the vectors pointing from the intersection of the edge and the transect to the sampling point
         m = np.array(np.meshgrid(edge_coeffs(x2), x1)).T
@@ -563,13 +659,19 @@ class SharpnessMeasure:
         d = v[0] / np.abs(v[0]) * np.linalg.norm(v, axis=0)
         # Make sure that the sampling point coordinates are in the patch
         m = np.sum(np.round(transect_fit).astype(int) <= 0, axis=1) + np.sum(
-            np.round(transect_fit).astype(int) >= patch_h, axis=1)
-        m = m==0
+            np.round(transect_fit).astype(int) >= patch_h, axis=1
+        )
+        m = m == 0
         d = d[m]
         # For each transect, calculate the pixel coordinates of the sampling points, record their value and their
         # distance from the edge. Then fit a cubic spline function to the points.
         if not d.shape[0] == 0:
-            idx = np.array([np.round(transect_fit[m]).astype(int), np.vstack([x1] * x2.shape[0])[m]])
+            idx = np.array(
+                [
+                    np.round(transect_fit[m]).astype(int),
+                    np.vstack([x1] * x2.shape[0])[m],
+                ]
+            )
             # find the pixel value at the sampling point
             val = patch[idx[0], idx[1]].copy()
 
@@ -584,9 +686,9 @@ class SharpnessMeasure:
         # Make sure there are no invalid edges before calculating the mean
         edges = edges[~np.all(edges == 0, axis=1)]
         # Make sure there are enough valid transects
-        if edges.shape[0]<5:
+        if edges.shape[0] < 5:
             return None
-        #Calculate the mean ESF
+        # Calculate the mean ESF
         esf = np.mean(edges, axis=0)
 
         # Shift the esf so the edge is in the middle
@@ -599,9 +701,9 @@ class SharpnessMeasure:
         # calculate the LSF
         lsf = np.abs((esf - np.roll(esf, 1))[1:])
         shift = abs(shift)
-        if shift >0:
-            x_ = x[shift+1:-shift].copy()
-            lsf_ = lsf[shift: -shift].copy()
+        if shift > 0:
+            x_ = x[shift + 1 : -shift].copy()
+            lsf_ = lsf[shift:-shift].copy()
         else:
             x_ = x[1:].copy()
             lsf_ = lsf.copy()
@@ -610,8 +712,8 @@ class SharpnessMeasure:
 
         # Trim the wings of the ESF at +- 3 sigma of the fitted Gaussian
         if lsf_popt is not None:
-            lim1 = round((abs(lsf_popt[1]) + lsf_popt[-1]*3) * 2)/2 + 0.5
-            lim2 = round((abs(lsf_popt[1]) + lsf_popt[-1]*5) * 2)/2 + 0.5
+            lim1 = round((abs(lsf_popt[1]) + lsf_popt[-1] * 3) * 2) / 2 + 0.5
+            lim2 = round((abs(lsf_popt[1]) + lsf_popt[-1] * 5) * 2) / 2 + 0.5
         else:
             lim1 = x[-1]
             lim2 = x[-1]
@@ -619,7 +721,7 @@ class SharpnessMeasure:
             lim1 = x[-1]
         idx1 = np.argwhere((-lim1 <= x) & (x <= lim1)).flatten()
         idx2 = np.argwhere((-lim2 <= x) & (x <= lim2)).flatten()
-        if lim2>=x[-shift]:
+        if lim2 >= x[-shift]:
             idx2 = idx2[shift:-shift]
         x_esf = x[idx1[1:]].copy()
         esf = esf[idx1[1:]].copy()
@@ -641,7 +743,7 @@ class SharpnessMeasure:
             return None
 
     def _fit_function(self, func, x, data, p0):
-        if type(p0)=='list':
+        if type(p0) == "list":
             p0 = np.array(p0).astype(np.float64)
         try:
             popt, pcov = curve_fit(func, x, data, p0=p0)
@@ -669,7 +771,6 @@ class SharpnessMeasure:
         except:
             return None, None, None, None, None
 
-
         if v_min is None or v_max is None:
             return None, None, None, None, None
 
@@ -681,7 +782,7 @@ class SharpnessMeasure:
         esf_norm_popt = self._fit_function(model_esf, x, esf_norm, p0=[1, 0.5, 0.5, 0])
         return (esf_norm, v_min, v_max, esf_popt, esf_norm_popt)
 
-    def evaluate_esf(self, lsf_popt,  esf_norm_popt, esf_norm, x) -> bool:
+    def evaluate_esf(self, lsf_popt, esf_norm_popt, esf_norm, x) -> bool:
         """
         Evaluate the quality of the ESF by calculating the edge SNR and checking if it is above the threshold, and
         by calculating the R2 value of the curve fitting, and also checking if it is above the threshold value.
@@ -699,7 +800,7 @@ class SharpnessMeasure:
 
         # Calculate R2 of the fit
         residuals = esf_norm - model_esf(x, *esf_norm_popt)
-        ss_res = np.sum(residuals ** 2)
+        ss_res = np.sum(residuals**2)
         ss_tot = np.sum((esf_norm - np.mean(esf_norm)) ** 2)
         r_squared = 1 - (ss_res / ss_tot)
         if r_squared < self.r2_threshold:
@@ -707,18 +808,18 @@ class SharpnessMeasure:
 
         # Calculate edge SNR
         new_lsf = np.diff(model_esf(x, *esf_norm_popt))
-        idx = np.argwhere(new_lsf/np.max(new_lsf) < 0.05).flatten()
-        if idx.shape[0]<=5:
+        idx = np.argwhere(new_lsf / np.max(new_lsf) < 0.05).flatten()
+        if idx.shape[0] <= 5:
             return False
         try:
-           idx_ = np.argwhere(np.diff(idx) > 1).flatten()[0]
+            idx_ = np.argwhere(np.diff(idx) > 1).flatten()[0]
         except:
             return False
         x_left = idx[idx_]
-        x_right = idx[idx_+1]
+        x_right = idx[idx_ + 1]
         _left = esf_norm[:x_left]
         _right = esf_norm[x_right:]
-        if _left.shape[0]==0 or _right.shape[0]==0:
+        if _left.shape[0] == 0 or _right.shape[0] == 0:
             return False
         noise1 = np.std(_left)
         noise2 = np.std(_right)
@@ -728,7 +829,6 @@ class SharpnessMeasure:
             # logging.debug("noise is not positive")
             return False
         edge_snr = 1 / noise
-
 
         if self.debug:
             print(f"snr {edge_snr}")
@@ -751,7 +851,9 @@ class SharpnessMeasure:
         for edge in edge_list:
             x, esf, lsf, esf_norm_popt = edge
             loc_50perc = x[np.argmin(np.abs(model_esf(x, *esf_norm_popt) - 0.5))]
-            rer = model_esf(loc_50perc + 0.5, *esf_norm_popt) - model_esf(loc_50perc - 0.5, *esf_norm_popt)
+            rer = model_esf(loc_50perc + 0.5, *esf_norm_popt) - model_esf(
+                loc_50perc - 0.5, *esf_norm_popt
+            )
             rers.append(rer)
         if len(rers) < 1:
             return None
@@ -764,11 +866,13 @@ class SharpnessMeasure:
         :return:
         """
         fwhms = []
-        for edge in (edge_list):
+        for edge in edge_list:
             x, esf, lsf, esf_norm_popt = edge
             try:
-               # lsf_ = np.abs(np.diff(model_esf(x_esf, *esf_popt)))
-                spline = UnivariateSpline(np.arange(lsf.shape[0]), lsf - np.max(lsf) / 2, s=0)
+                # lsf_ = np.abs(np.diff(model_esf(x_esf, *esf_popt)))
+                spline = UnivariateSpline(
+                    np.arange(lsf.shape[0]), lsf - np.max(lsf) / 2, s=0
+                )
                 r1, r2 = spline.roots()
                 fwhm = np.max([r1, r2]) - np.min([r1, r2])
                 fwhms.append(fwhm / 10)
@@ -793,11 +897,11 @@ class SharpnessMeasure:
                 N = lsf.shape[0]
                 T = 0.1
                 yf = fft(lsf)
-                xf = fftfreq(N, T)[:N // 2]
-                mtf = 2.0 / N * np.abs(yf[0:N // 2])
+                xf = fftfreq(N, T)[: N // 2]
+                mtf = 2.0 / N * np.abs(yf[0 : N // 2])
                 mtf = mtf / mtf[0]
                 idx = np.argwhere(xf < 1.5).flatten()
-                p = interp1d(xf[idx], mtf[idx], kind='cubic')
+                p = interp1d(xf[idx], mtf[idx], kind="cubic")
                 mtf_nyq.append(p(0.5))
                 mtf_half_nyq.append(p(0.25))
 
@@ -809,9 +913,7 @@ class SharpnessMeasure:
 
 
 def sharpness_function_from_array(
-    img: np.array,
-    metrics: List = ['RER', 'FWHM', 'MTF'],
-    **kwargs: Any
+    img: np.array, metrics: List = ["RER", "FWHM", "MTF"], **kwargs: Any
 ) -> Dict:
     """
     Generic function to apply either SNR algorithm for an image.
@@ -827,22 +929,18 @@ def sharpness_function_from_array(
     if len(img.shape) < 3:
         img = np.expand_dims(img, -1)
     metrics = [s.upper() for s in metrics]
-    if 'RER' in metrics:
-        kwargs['get_rer'] = True
-    if 'FWHM' in metrics:
-        kwargs['get_fwhm'] = True
-    if 'MTF' in metrics:
-        kwargs['get_mtf'] = True
+    if "RER" in metrics:
+        kwargs["get_rer"] = True
+    if "FWHM" in metrics:
+        kwargs["get_fwhm"] = True
+    if "MTF" in metrics:
+        kwargs["get_mtf"] = True
     sharpness = SharpnessMeasure(**kwargs)
     return sharpness.apply(img)
 
 
-
 def sharpness_function_from_fn(
-    image: str,
-    ext: str = "tif",
-    metrics: List = ['RER', 'FWHM', 'MTF'],
-    **kwargs: Any
+    image: str, ext: str = "tif", metrics: List = ["RER", "FWHM", "MTF"], **kwargs: Any
 ) -> Dict:
     """
     Generic function to apply either SNR algorithm for an image.
@@ -863,16 +961,23 @@ def sharpness_function_from_fn(
     if len(img.shape) < 3:
         img = np.expand_dims(img, -1)
     metrics = [s.upper() for s in metrics]
-    kwargs['get_rer'] = 'RER' in metrics
-    kwargs['get_fwhm'] = 'FWHM' in metrics
-    kwargs['get_mtf'] = 'MTF' in metrics
+    kwargs["get_rer"] = "RER" in metrics
+    kwargs["get_fwhm"] = "FWHM" in metrics
+    kwargs["get_mtf"] = "MTF" in metrics
     sharpness = SharpnessMeasure(**kwargs)
     return sharpness.apply(img)
 
 
 class SharpnessMetric(Metric):
-    def __init__(self, experiment_info: Any, ext: str = "tif", metrics: List = ['RER', 'FWHM', 'MTF'], parallel=True,
-                 njobs=-1, **kwargs: Any) -> None:
+    def __init__(
+        self,
+        experiment_info: Any,
+        ext: str = "tif",
+        metrics: List = ["RER", "FWHM", "MTF"],
+        parallel=True,
+        njobs=-1,
+        **kwargs: Any,
+    ) -> None:
         """
         The metric to measure sharpness within an Iquaflow experiment.
         :param experiment_info:
@@ -889,14 +994,14 @@ class SharpnessMetric(Metric):
         self.metrics = [s.upper() for s in metrics]
         self.metric_names = []
         for metric in metrics:
-            for direction in ['X', 'Y', 'other']:
-                if metric == 'MTF':
+            for direction in ["X", "Y", "other"]:
+                if metric == "MTF":
                     self.metric_names.append(f"{metric}_NYQ_{direction}")
                     self.metric_names.append(f"{metric}_halfNYQ_{direction}")
                 else:
                     self.metric_names.append(f"{metric}_{direction}")
 
-        kwargs['calculate_mean'] = True
+        kwargs["calculate_mean"] = True
         self.parallel = parallel
         self.njobs = njobs
         self.kwargs = kwargs
@@ -920,18 +1025,22 @@ class SharpnessMetric(Metric):
         for m in self.metric_names:
             results[m] = []
         if self.parallel:
-            r = Parallel(n_jobs=self.njobs)(delayed(sharpness_function_from_fn)(pred_fn, self.ext, self.metrics, **self.kwargs) for pred_fn in pred_fn_lst)
+            r = Parallel(n_jobs=self.njobs)(
+                delayed(sharpness_function_from_fn)(
+                    pred_fn, self.ext, self.metrics, **self.kwargs
+                )
+                for pred_fn in pred_fn_lst
+            )
             for result in r:
-                for k,v in result['mean'].items():
-                    results[k] = v
+                for k, v in result["mean"].items():
+                    results[k].append(v[0])
 
         else:
             for i, pred_fn in enumerate(pred_fn_lst):
-                result = sharpness_function_from_fn(pred_fn, self.ext, self.metrics, **self.kwargs)['mean']
+                result = sharpness_function_from_fn(
+                    pred_fn, self.ext, self.metrics, **self.kwargs
+                )["mean"]
 
-                for k,v in result.items():
+                for k, v in result.items():
                     results[k].append(v[0])
-        return {
-            k: round(np.nanmean(v), 3)
-            for k, v in results.items()
-        }
+        return {k: round(np.nanmean(v), 3) for k, v in results.items()}
