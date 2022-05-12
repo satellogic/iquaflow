@@ -7,11 +7,10 @@ import mlflow
 import numpy as np
 
 from iquaflow.datasets import DSModifier, DSWrapper
-from iquaflow.datasets.modifier_rer import BlurImage
+from iquaflow.datasets.modifier_rer import DSModifier_rer
 from iquaflow.experiments import ExperimentInfo, ExperimentSetup
 from iquaflow.experiments.task_execution import PythonScriptTaskExecution
-from iquaflow.metrics import BBDetectionMetrics, RERMetric, SNRMetric
-from iquaflow.metrics.rer_metric import MTF, RERfunctions
+from iquaflow.metrics import BBDetectionMetrics, SharpnessMetric, SNRMetric
 
 results_1 = [
     1.0,
@@ -67,7 +66,7 @@ class TestExperimentInfo:
         experiment_info = ExperimentInfo(experiment_name)
         # metrics
         metric_1 = BBDetectionMetrics()
-        metric_2 = RERMetric(experiment_info, win=1024, ext="jpg")
+        metric_2 = SharpnessMetric(experiment_info, ext="jpg")
         # apply metrics
         experiment_info.apply_metric_per_run(metric_1, str(ds_wrapper.json_annotations))
         experiment_info.apply_metric_per_run(metric_2, str(ds_wrapper.json_annotations))
