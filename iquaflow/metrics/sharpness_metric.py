@@ -21,17 +21,18 @@ from iquaflow.metrics import Metric
 DEBUG_DIR = "./rer_debug"
 
 
-def model_esf(x, a, b, c, d):
+def model_esf(x: np.array, a: float, b: float, c: float, d: float) -> np.array:
     """
     The model function to fit the ESF.
     """
     try:
-        return a / (1 + np.exp((x - b) / c)) + d
-    except FloatingPointError or RuntimeWarning:
+        b_ = np.exp((x - b) / c)
+        return a / (1 + b_) + d
+    except Exception:
         pass
 
 
-def gaussian(x, a, x0, sigma):
+def gaussian(x: np.array, a: float, x0: float, sigma: float) -> np.array:
     return a * np.exp(-((x - x0) ** 2) / (2 * sigma**2))
 
 
@@ -47,22 +48,22 @@ class SharpnessMeasure:
 
     def __init__(
         self,
-        window_size: int = None,
-        stride: int = None,
+        window_size: Optional[int] = None,
+        stride: Optional[int] = None,
         edge_length: int = 5,
         edge_distance: int = 10,
-        contrast_params: Dict = {
+        contrast_params: Dict[str, Dict[str, float]] = {
             "channel 0": {"alpha": 1.2, "beta": 0.3, "gamma": 1.2}
         },
-        pixels_sampled: int = None,
+        pixels_sampled: Optional[int] = None,
         r2_threshold: float = 0.995,
         snr_threshold: float = 50,
         get_rer: bool = True,
         get_fwhm: bool = True,
         get_mtf: bool = False,
         debug: bool = False,
-        calculate_mean=False,
-    ) -> None:
+        calculate_mean: bool = False,
+    ):
 
         """
         The implementation needs several parameters, where the best value can be quite different depending on the source
@@ -110,11 +111,11 @@ class SharpnessMeasure:
         self.get_mtf = get_mtf
         self.debug = debug
         self.calculate_mean = calculate_mean
-        self.patch_list = []
+        self.patch_list: List[float] = []
 
-        self.edge_snrs = []
+        self.edge_snrs: List[Any] = []
 
-    def apply(self, image: np.array) -> Dict:
+    def apply(self, image: np.array) -> Any:
         """
         The main function to execute the measurement.
         :param image:
@@ -131,23 +132,23 @@ class SharpnessMeasure:
                     beta = self.contrast_params[f"channel {i}"]["beta"]
                     gamma = self.contrast_params[f"channel {i}"]["gamma"]
                 else:
-                    alpha = self.contrast_params[f"channel 0"]["alpha"]
-                    beta = self.contrast_params[f"channel 0"]["beta"]
-                    gamma = self.contrast_params[f"channel 0"]["gamma"]
+                    alpha = self.contrast_params["channel 0"]["alpha"]
+                    beta = self.contrast_params["channel 0"]["beta"]
+                    gamma = self.contrast_params["channel 0"]["gamma"]
                 results[f"channel {i}"] = self.apply_to_one_channel(
                     image[:, :, i], (alpha, beta, gamma)
                 )
         else:
-            alpha = self.contrast_params[f"channel 0"]["alpha"]
-            beta = self.contrast_params[f"channel 0"]["beta"]
-            gamma = self.contrast_params[f"channel 0"]["gamma"]
+            alpha = self.contrast_params["channel 0"]["alpha"]
+            beta = self.contrast_params["channel 0"]["beta"]
+            gamma = self.contrast_params["channel 0"]["gamma"]
             results["channel 0"] = self.apply_to_one_channel(
                 image, (alpha, beta, gamma)
             )
 
         # Calculate mean values of the metrics across channels
         if self.calculate_mean:
-            out = {}
+            out = {}  # type: ignore
             for ch in results.values():
                 for metric, value in ch.items():
                     for direction, v in value.items():
@@ -174,7 +175,9 @@ class SharpnessMeasure:
                     )
         return results
 
-    def apply_to_one_channel(self, image: np.array, patch_params: Tuple) -> Dict:
+    def apply_to_one_channel(
+        self, image: np.array, patch_params: Tuple[float, float, float]
+    ) -> Any:
         """
         Runs the measurement one image channel at the the time.
         The following steps are executed:
@@ -189,7 +192,7 @@ class SharpnessMeasure:
         """
         assert len(image.shape) < 3
 
-        output = {}
+        output: Dict[str, Dict[str, Any]] = {}
         if self.get_rer:
             output["RER"] = {}
 
@@ -199,8 +202,6 @@ class SharpnessMeasure:
         if self.get_mtf:
             output["MTF_NYQ"] = {}
             output["MTF_halfNYQ"] = {}
-
-        final_good_lines = {}
 
         # Find straight lines in the image
         lines = self.get_lines(image)
@@ -293,8 +294,9 @@ class SharpnessMeasure:
         if self.window_size[0] is None:
             lines = self.edge_detector(image)
         else:
-            for i in range(0, im_height, self.stride[0]):
-                for j in range(0, im_width, self.stride[0]):
+            step = self.stride[0]  # type: ignore
+            for i in range(0, im_height, step):
+                for j in range(0, im_width, step):
                     image_window = image[
                         i : min(i + self.window_size[0], image.shape[0]),
                         j : min(j + self.window_size[0], image.shape[1]),
@@ -353,7 +355,7 @@ class SharpnessMeasure:
         # Format: [x0, y0, x1, y1]
         return lines_
 
-    def _sort_lines(self, lines: list) -> np.array:
+    def _sort_lines(self, lines: Any) -> np.array:
         """
         Given the list of lines found by the edge detectors, it checks the lengths of the lines, and cuts them up to
         segments with a length of the self.edge_length.
@@ -362,7 +364,7 @@ class SharpnessMeasure:
         """
         good_lines = []
 
-        lines_ = [LineString(list(l)) for l in lines]
+        lines_ = [LineString(list(line)) for line in lines]
         for line in lines_:
             for j in range(self.edge_length):
                 splitter = MultiPoint(
@@ -382,7 +384,9 @@ class SharpnessMeasure:
                         good_lines.append([x0, y0, x1, y1])
         return np.array(good_lines)
 
-    def sort_angles(self, lines: np.array) -> Tuple:
+    def sort_angles(
+        self, lines: np.array
+    ) -> Tuple[List[np.array], List[np.array], List[np.array]]:
         """
         Calculates the angle of the each of the lines relative to vertical.
         Sorts the lines into two groups:
@@ -398,8 +402,8 @@ class SharpnessMeasure:
         vertical = []
         other = []
 
-        for l in lines:
-            x0, y0, x1, y1 = l
+        for line in lines:
+            x0, y0, x1, y1 = line
             # theta is relative to the vertical, y direction
             theta = np.rad2deg(np.arctan2(x1 - x0, y1 - y0)) % 180
 
@@ -416,11 +420,11 @@ class SharpnessMeasure:
     def find_good_patches(
         self,
         image: np.array,
-        vertical: List,
-        horizontal: List,
-        other: List,
-        params: Tuple,
-    ) -> Tuple:
+        vertical: List[np.array],
+        horizontal: List[np.array],
+        other: List[np.array],
+        params: Tuple[float, float, float],
+    ) -> Any:
         """
         Takes the line lists, for each line cuts a patch around the line. Then it checks if the patch complies with the
         contrast conditions defined by the parameters. If it complies, it adds the patch to the patch list.
@@ -553,18 +557,18 @@ class SharpnessMeasure:
         fig, ax = plt.subplots(figsize=(100, 100))
         ax.imshow(image)
         print(f"good: {len(good_lines[-1])}")
-        for l in lines:
-            x1, y1, x2, y2 = l
+        for line in lines:
+            x1, y1, x2, y2 = line
             ax.plot([x1, x2], [y1, y2], color="black", linewidth=2)
-        for l in good_lines:
-            x1, x2, y1, y2, _ = l
+        for line in good_lines:
+            x1, x2, y1, y2, _ = line
             ax.plot([x1, x2], [y1, y2], color="red", linewidth=2)
 
         fn = "good_lines.png"
         fig.savefig(os.path.join(DEBUG_DIR, fn))
         plt.clf()
 
-    def get_edge_list(self, patch_list: List) -> List:
+    def get_edge_list(self, patch_list: List[Any]) -> List[Any]:
         """
         Create a list of the good edges using the provided patch list
         :param patch_list:
@@ -616,7 +620,7 @@ class SharpnessMeasure:
         edge_coeffs = np.poly1d(np.polyfit(list(range(len(points))), points, 1))
         return edge_coeffs
 
-    def compute_esf(self, patch: np.array, edge_coeffs):
+    def compute_esf(self, patch: np.array, edge_coeffs: Any) -> Any:
         """
         Constructs the ESF, the normalized ESF, and the LSF, checks their quality, and fits the theoretical functions.
         :param patch:
@@ -679,9 +683,9 @@ class SharpnessMeasure:
                 val = np.take_along_axis(val, np.argsort(d, axis=1), axis=1)
                 dists = np.take_along_axis(d, np.argsort(d, axis=1), axis=1)
                 # for each transect fit a cubic spline on the sampled points, and resample the fit
-                for l, (d, v) in enumerate(zip(dists, val)):
+                for i, (d, v) in enumerate(zip(dists, val)):
                     c = CubicSpline(d, v)
-                    edges[l] = c(x)
+                    edges[i] = c(x)
 
         # Make sure there are no invalid edges before calculating the mean
         edges = edges[~np.all(edges == 0, axis=1)]
@@ -742,16 +746,18 @@ class SharpnessMeasure:
         else:
             return None
 
-    def _fit_function(self, func, x, data, p0):
+    def _fit_function(
+        self, func: Any, x: np.array, data: np.array, p0: List[float]
+    ) -> Any:
         if type(p0) == "list":
             p0 = np.array(p0).astype(np.float64)
         try:
             popt, pcov = curve_fit(func, x, data, p0=p0)
-        except:
+        except Exception:
             return None
         return popt
 
-    def normalize_esf(self, esf: np.array, x: np.array) -> Tuple:
+    def normalize_esf(self, esf: np.array, x: np.array) -> Tuple[Any, ...]:
         """
         Normalizes the ESF.
         :param esf:
@@ -768,7 +774,7 @@ class SharpnessMeasure:
         try:
             v_max = np.max(model_esf(np.arange(x[-1], x[-1] + 4, 0.1), *esf_popt))
             v_min = np.min(model_esf(np.arange(x[0] - 4, x[0], 0.1), *esf_popt))
-        except:
+        except Exception:
             return None, None, None, None, None
 
         if v_min is None or v_max is None:
@@ -782,7 +788,13 @@ class SharpnessMeasure:
         esf_norm_popt = self._fit_function(model_esf, x, esf_norm, p0=[1, 0.5, 0.5, 0])
         return (esf_norm, v_min, v_max, esf_popt, esf_norm_popt)
 
-    def evaluate_esf(self, lsf_popt, esf_norm_popt, esf_norm, x) -> bool:
+    def evaluate_esf(
+        self,
+        lsf_popt: np.array,
+        esf_norm_popt: np.array,
+        esf_norm: np.array,
+        x: np.array,
+    ) -> bool:
         """
         Evaluate the quality of the ESF by calculating the edge SNR and checking if it is above the threshold, and
         by calculating the R2 value of the curve fitting, and also checking if it is above the threshold value.
@@ -813,7 +825,7 @@ class SharpnessMeasure:
             return False
         try:
             idx_ = np.argwhere(np.diff(idx) > 1).flatten()[0]
-        except:
+        except Exception:
             return False
         x_left = idx[idx_]
         x_right = idx[idx_ + 1]
@@ -830,18 +842,13 @@ class SharpnessMeasure:
             return False
         edge_snr = 1 / noise
 
-        if self.debug:
-            print(f"snr {edge_snr}")
-
-        if self.debug:
-            print(edge_snr, r_squared)
         if edge_snr >= self.snr_threshold and r_squared >= self.r2_threshold:
             self.edge_snrs[-1].append(edge_snr)
             return True
 
         return False
 
-    def calculate_rer(self, edge_list: List) -> np.array:
+    def calculate_rer(self, edge_list: List[np.array]) -> np.array:
         """
         Given the list of edges, calculates the RER value for each edge.
         :param edge_list:
@@ -859,7 +866,7 @@ class SharpnessMeasure:
             return None
         return np.array(rers)
 
-    def calculate_fwhm(self, edge_list: List) -> np.array:
+    def calculate_fwhm(self, edge_list: List[np.array]) -> np.array:
         """
         Given the list of edges, calculates the FWHM value for each edge.
         :param edge_list:
@@ -876,13 +883,13 @@ class SharpnessMeasure:
                 r1, r2 = spline.roots()
                 fwhm = np.max([r1, r2]) - np.min([r1, r2])
                 fwhms.append(fwhm / 10)
-            except:
+            except Exception:
                 continue
         if len(fwhms) < 1:
             return None
         return np.array(fwhms)
 
-    def calculate_mtf(self, edge_list: List) -> np.array:
+    def calculate_mtf(self, edge_list: List[np.array]) -> np.array:
         """
         Given a list of edges, calculates the MTF curve for each edge, and returns the value at
         the Nyquist and half Nyquist frequencies.
@@ -905,7 +912,7 @@ class SharpnessMeasure:
                 mtf_nyq.append(p(0.5))
                 mtf_half_nyq.append(p(0.25))
 
-            except:
+            except Exception:
                 pass
         if len(mtf_nyq) < 1:
             return None
@@ -913,8 +920,8 @@ class SharpnessMeasure:
 
 
 def sharpness_function_from_array(
-    img: np.array, metrics: List = ["RER", "FWHM", "MTF"], **kwargs: Any
-) -> Dict:
+    img: np.array, metrics: List[str] = ["RER", "FWHM", "MTF"], **kwargs: Any
+) -> Any:
     """
     Generic function to apply either SNR algorithm for an image.
     Args:
@@ -936,12 +943,16 @@ def sharpness_function_from_array(
     if "MTF" in metrics:
         kwargs["get_mtf"] = True
     sharpness = SharpnessMeasure(**kwargs)
-    return sharpness.apply(img)
+    result = sharpness.apply(img)
+    return result
 
 
 def sharpness_function_from_fn(
-    image: str, ext: str = "tif", metrics: List = ["RER", "FWHM", "MTF"], **kwargs: Any
-) -> Dict:
+    image: str,
+    ext: str = "tif",
+    metrics: List[str] = ["RER", "FWHM", "MTF"],
+    **kwargs: Any,
+) -> Any:
     """
     Generic function to apply either SNR algorithm for an image.
     Args:
@@ -965,7 +976,8 @@ def sharpness_function_from_fn(
     kwargs["get_fwhm"] = "FWHM" in metrics
     kwargs["get_mtf"] = "MTF" in metrics
     sharpness = SharpnessMeasure(**kwargs)
-    return sharpness.apply(img)
+    result = sharpness.apply(img)
+    return result
 
 
 class SharpnessMetric(Metric):
@@ -973,9 +985,9 @@ class SharpnessMetric(Metric):
         self,
         experiment_info: Any,
         ext: str = "tif",
-        metrics: List = ["RER", "FWHM", "MTF"],
-        parallel=True,
-        njobs=-1,
+        metrics: List[str] = ["RER", "FWHM", "MTF"],
+        parallel: bool = True,
+        njobs: Optional[int] = -1,
         **kwargs: Any,
     ) -> None:
         """
@@ -988,7 +1000,7 @@ class SharpnessMetric(Metric):
         :param kwargs:
         """
 
-        super().__init__()
+        super().__init__()  # type: ignore
         self.experiment_info = experiment_info
         self.ext = ext
         self.metrics = [s.upper() for s in metrics]
@@ -1021,7 +1033,7 @@ class SharpnessMetric(Metric):
             self.parent_folder, modifier_subfold, "*", f"*.{self.ext}"
         )
         pred_fn_lst = glob(glob_crit)
-        results = {}
+        results: Dict[str, Any] = {}
         for m in self.metric_names:
             results[m] = []
         if self.parallel:

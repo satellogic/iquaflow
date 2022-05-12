@@ -2,11 +2,9 @@ import os
 import random
 import shutil
 import tempfile
-from typing import Any
 
 import mlflow
 import numpy as np
-from scipy.ndimage.interpolation import rotate
 
 from iquaflow.datasets import DSModifier, DSWrapper
 from iquaflow.datasets.modifier_rer import DSModifier_rer
@@ -82,8 +80,7 @@ class TestExperimentInfo:
             ), f"Unexpected result for {metric_name}"
         for metric_name in metric_2.metric_names:
             assert (
-                run["metrics_dict"][metric_name] == -999
-                or 0.0 < run["metrics_dict"][metric_name] < 1.0
+                0.0 < run["metrics_dict"][metric_name] < 3.0
             ), f"Unexpected result for {metric_name}"
         remove_mlruns()
 
@@ -156,7 +153,10 @@ class TestSharpness:
             experiment_info = ExperimentInfo("metric_test")
             np.random.seed(42)
             metric_sharpness = SharpnessMetric(
-                experiment_info, ext="jpg", metrics=["RER", "FWHM", "MTF"]
+                experiment_info,
+                ext="jpg",
+                metrics=["RER", "FWHM", "MTF"],
+                parallel=True,
             )
 
             assert (
@@ -185,7 +185,7 @@ class TestSharpness:
                 assert (
                     abs(expected_results_in_coco_ds[key] - myrun["metrics_dict"][key])
                     / expected_results_in_coco_ds[key]
-                    < 0.1
+                    < 0.15
                 ), f"Unexpected result for  {key} ({myrun['metrics_dict'][key]})"
 
             run_name = "ds#rer0.3_modifier"
@@ -202,7 +202,7 @@ class TestSharpness:
                         - myrun["metrics_dict"][key]
                     )
                     / expected_results_in_coco_ds_after_blur[key]
-                    < 0.1
+                    < 0.15
                 ), f"Unexpected result for  {key} ({myrun['metrics_dict'][key]})"
 
 
