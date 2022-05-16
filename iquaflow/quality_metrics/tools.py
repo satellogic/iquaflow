@@ -1,10 +1,121 @@
+from copy import deepcopy
 from typing import Any, List
 
 import cv2
 import numpy as np
 import torch
+import torchvision.models as models
 from sklearn.metrics import roc_auc_score  # type: ignore
 from torchvision import transforms
+
+
+def create_network(
+    network: str = "resnet18", pretrained: bool = True, out_features: Any = None
+) -> torch.nn.Module:
+    torch_func = getattr(models, network)
+    net: torch.nn.Module = torch_func(pretrained=pretrained)
+    if out_features is not None:
+        if hasattr(net, "fc"):  # ResNet18, ResNet50, etc.
+            net.fc = torch.nn.Linear(int(net.fc.in_features), out_features)
+        elif hasattr(net, "classifier"):  # VGG19, AlexNet, etc.
+            if (
+                "Linear" in type(net.classifier).__name__
+            ):  # torch.nn.modules.linear.Linear
+                net.classifier = torch.nn.Linear(
+                    int(net.classifier.in_features), out_features
+                )
+            elif (
+                "Sequential" in type(net.classifier).__name__
+            ):  # torch.nn.modules.container.Sequential
+                """
+                # change all layers upon first in_features
+                for layer in range(len(net.classifier)):
+                    if "Linear" in type(net.classifier[layer]):
+                        if layer == 0:
+                            net.classifier[layer] = torch.nn.Linear(
+                                int(net.classifier[layer].in_features), out_features
+                            )
+                        else:
+                            net.classifier[layer] = torch.nn.Linear(
+                                out_features, out_features
+                            )
+                """
+                # change last layer from classifier
+                for layer in reversed(range(len(net.classifier))):
+                    if "Linear" in type(net.classifier[layer]).__name__:
+                        net.classifier[layer] = torch.nn.Linear(
+                            int(net.classifier[layer].in_features), out_features
+                        )
+                    break
+    return net
+
+
+class MultiHead(torch.nn.Module):
+    def __init__(
+        self,
+        network: torch.nn.Module,
+        head_regs: List[int],
+    ) -> None:
+        super().__init__()
+        self.network = network
+        # replace head by several heads
+        heads = []
+        if hasattr(self.network, "fc"):  # ResNet18, ResNet50, etc.
+            for r in head_regs:
+                heads.append(torch.nn.Linear(int(self.network.fc.in_features), r))
+            self.network.fc = torch.nn.Sequential()  # remove fc
+        elif hasattr(self.network, "classifier"):  # VGG19, AlexNet, etc.
+            for r in head_regs:
+                if (
+                    "Linear" in type(self.network.classifier).__name__
+                ):  # torch.nn.modules.linear.Linear
+                    heads.append(
+                        torch.nn.Linear(int(self.network.classifier.in_features), r)
+                    )
+                elif "Sequential" in type(self.network.classifier).__name__:
+                    classifier = deepcopy(self.network.classifier)
+                    for layer in reversed(range(len(self.network.classifier))):
+                        if "Linear" in type(self.network.classifier[layer]).__name__:
+                            classifier[layer] = torch.nn.Linear(
+                                int(self.network.classifier[layer].in_features), r
+                            )
+                        break
+                    heads.append(classifier)
+            self.network.classifier = torch.nn.Sequential()  # remove classifier
+        self.network.heads = torch.nn.Sequential(*heads)  # type: ignore
+
+    def forward(self, inputs: Any) -> Any:
+        x = self.network(inputs)
+        return [head(x) for head in self.network.heads]  # type: ignore
+
+
+"""
+class MultiHead_Custom(torch.nn.Module):
+    def __init__(
+        self,
+        network: torch.nn.Module = create_network("resnet18", True),
+        *heads: torch.nn.Module,
+    ) -> None:
+        super().__init__()
+        self.network = network
+        self.network.fc = torch.nn.Sequential()  # remove fc
+        self.network.heads = heads  # type: ignore
+
+    def forward(self, inputs: Any) -> Any:
+        x = self.network(inputs)
+        return [head(x) for head in self.network.heads]  # type: ignore
+# usage: MultiHead_Custom(models.resnet18(pretrained=True),*[torch.nn.Linear(512, self.num_regs[idx]) for idx in range(len(self.params))],)
+"""
+"""
+class MultiBranch(torch.nn.Module):  # deprecated
+    def __init__(self, *modules: torch.nn.Module) -> None:
+        super().__init__()
+        self.modules = modules  # type: ignore
+
+    def forward(self, inputs: Any) -> Any:
+        return [module(inputs) for module in self.modules]  # type: ignore
+# usage: self.net=models.resnet18(pretrained=True); self.net.fc=MultiBranch(*[torch.nn.Linear(512, self.num_regs[idx]) for idx in range(len(self.params))])
+"""
 
 
 def force_rgb(x: Any) -> Any:

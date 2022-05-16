@@ -12,7 +12,6 @@ from typing import Any, Dict, List, Tuple
 
 import numpy as np
 import torch
-import torchvision.models as models
 from PIL import Image
 from torch.autograd import Variable
 from torchvision import transforms
@@ -29,7 +28,9 @@ from iquaflow.datasets import (
 from iquaflow.quality_metrics.benchmark import plot_benchmark, plot_single
 from iquaflow.quality_metrics.dataloader import Dataset
 from iquaflow.quality_metrics.tools import (
+    MultiHead,
     circ3d_pad,
+    create_network,
     force_rgb,
     get_accuracy,
     get_accuracy_k,
@@ -81,6 +82,9 @@ def parse_params_cfg(default_cfg_path: str = "config.cfg") -> Any:
     config = configparser.ConfigParser()
     config.read(cfg_path)
     parser.add_argument("--trainid", default=config["RUN"]["trainid"])
+    parser.add_argument(
+        "--trainds", default=config["PATHS"]["trainds"]
+    )  # inria-aid, "xview", "ds_coco_dataset"
     parser.add_argument("--outputpath", default=config["PATHS"]["outputpath"])
     parser.add_argument("--traindsinput", default=config["PATHS"]["traindsinput"])
     parser.add_argument("--valds", default=config["PATHS"]["valds"])
@@ -119,7 +123,9 @@ def parse_params_cfg(default_cfg_path: str = "config.cfg") -> Any:
     parser.add_argument(
         "--workers", default=json.loads(config["HYPERPARAMS"]["workers"])
     )
-    parser.add_argument("--data_shuffle", default=config["HYPERPARAMS"]["data_shuffle"])
+    parser.add_argument(
+        "--data_shuffle", default=eval(config["HYPERPARAMS"]["data_shuffle"])
+    )
     if config.has_option("HYPERPARAMS", "soft_threshold"):
         parser.add_argument(
             "--soft_threshold",
@@ -130,9 +136,26 @@ def parse_params_cfg(default_cfg_path: str = "config.cfg") -> Any:
             "--soft_threshold",
             default=0.3,
         )
-    parser.add_argument(
-        "--trainds", default=config["PATHS"]["trainds"]
-    )  # inria-aid, "xview", "ds_coco_dataset"
+    if config.has_option("HYPERPARAMS", "network"):
+        parser.add_argument(
+            "--network",
+            default=json.loads(config["HYPERPARAMS"]["network"]),
+        )
+    else:
+        parser.add_argument(
+            "--network",
+            default="resnet18",
+        )
+    if config.has_option("HYPERPARAMS", "pretrained"):
+        parser.add_argument(
+            "--pretrained",
+            default=eval(config["HYPERPARAMS"]["pretrained"]),
+        )
+    else:
+        parser.add_argument(
+            "--pretrained",
+            default=True,
+        )
     tmp_args, uk_args = parser.parse_known_args()
     outputpath = tmp_args.outputpath
     trainid = tmp_args.trainid
@@ -257,31 +280,6 @@ def get_regression_interval_classes(
     return yclasses
 
 
-class MultiHead(torch.nn.Module):  # deprecated
-    def __init__(self, *modules: torch.nn.Module) -> None:
-        super().__init__()
-        self.modules = modules  # type: ignore
-
-    def forward(self, inputs: Any) -> Any:
-        return [module(inputs) for module in self.modules]  # type: ignore
-
-
-class MultiHead_ResNet(torch.nn.Module):
-    def __init__(
-        self,
-        network: torch.nn.Module = models.resnet18(pretrained=True),
-        *heads: torch.nn.Module,
-    ) -> None:
-        super().__init__()
-        self.network = network
-        self.network.fc = torch.nn.Sequential()  # remove fc
-        self.network.heads = heads  # type: ignore
-
-    def forward(self, inputs: Any) -> Any:
-        x = self.network(inputs)
-        return [head(x) for head in self.network.heads]  # type: ignore
-
-
 class Regressor:
     def __init__(self, args: Any) -> None:
         self.train_ds = args.trainds
@@ -294,6 +292,8 @@ class Regressor:
         self.momentum = float(args.momentum)
         self.weight_decay = float(args.weight_decay)
         self.batch_size = int(args.batch_size)
+        self.network = args.network
+        self.pretrained = args.pretrained
 
         # Get Regressor Params from dicts
         self.modifier_params = args.modifier_params
@@ -327,19 +327,11 @@ class Regressor:
         self.cCROP = get_tensor_crop_transform(self.crop_size, "center")
         # Create Network
         if len(self.params) == 1:  # Single Head
-            self.net = models.resnet18(pretrained=True)
-            self.net.fc = torch.nn.Linear(512, self.num_regs[0])
+            self.net = create_network(self.network, self.pretrained, self.num_regs[0])
         else:  # MultiHead
-            self.net = MultiHead_ResNet(
-                models.resnet18(pretrained=True),
-                *[
-                    torch.nn.Linear(512, self.num_regs[idx])
-                    for idx in range(len(self.params))
-                ],
+            self.net = MultiHead(
+                create_network(self.network, self.pretrained), self.num_regs
             )
-            # self.net=models.resnet18(pretrained=True)
-            # self.net.fc=MultiHead(*[torch.nn.Linear(512, self.num_regs[idx]) for idx in range(len(self.params))])
-
         # Training HyperParams
         self.optimizer = torch.optim.SGD(
             self.net.parameters(),
@@ -362,6 +354,8 @@ class Regressor:
         # DEBUG Options
         self.debug = args.debug
         self.save_mat = args.save_mat
+        if self.debug:
+            print(self.net)
 
         # GPU Options
         self.cuda = args.cuda
