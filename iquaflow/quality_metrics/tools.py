@@ -89,7 +89,6 @@ class MultiHead(torch.nn.Module):
         return [head(x) for head in self.network.heads]  # type: ignore
 
 
-"""
 class MultiHead_Custom(torch.nn.Module):
     def __init__(
         self,
@@ -104,9 +103,11 @@ class MultiHead_Custom(torch.nn.Module):
     def forward(self, inputs: Any) -> Any:
         x = self.network(inputs)
         return [head(x) for head in self.network.heads]  # type: ignore
+
+
 # usage: MultiHead_Custom(models.resnet18(pretrained=True),*[torch.nn.Linear(512, self.num_regs[idx]) for idx in range(len(self.params))],)
-"""
-"""
+
+
 class MultiBranch(torch.nn.Module):  # deprecated
     def __init__(self, *modules: torch.nn.Module) -> None:
         super().__init__()
@@ -114,8 +115,9 @@ class MultiBranch(torch.nn.Module):  # deprecated
 
     def forward(self, inputs: Any) -> Any:
         return [module(inputs) for module in self.modules]  # type: ignore
+
+
 # usage: self.net=models.resnet18(pretrained=True); self.net.fc=MultiBranch(*[torch.nn.Linear(512, self.num_regs[idx]) for idx in range(len(self.params))])
-"""
 
 
 def force_rgb(x: Any) -> Any:
