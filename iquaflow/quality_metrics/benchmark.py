@@ -34,8 +34,12 @@ def plot_1d(
     # exit if values is empty or nan
     if len(values) == 0:
         return None
-    if np.isnan(np.nanmin(values)) or np.isnan(np.nanmax(values)):
+    """  # if results are nan, discard plot
+    if np.isnan(np.nanmin(np.vstack(np.array(values)))) or np.isnan(
+        np.nanmax(np.vstack(np.array(values)))
+    ):
         return None
+    """
     # limit and colors
     values[limit:] = []
     labels[limit:] = []
@@ -105,6 +109,8 @@ def plot_parameter(
         ["epoch", parameter_name],
         tags,
         (10, 10),
+        "plot",
+        len(train_values),
     )
     plot_1d(
         val_values,
@@ -113,6 +119,8 @@ def plot_parameter(
         ["epoch", parameter_name],
         tags,
         (10, 10),
+        "plot",
+        len(val_values),
     )
     # filter last 10 epochs values
     train_values_last = [
@@ -146,6 +154,7 @@ def plot_parameter(
         train_tags_top,
         (10, 10),
         "boxplot",
+        len(train_values_top),
     )
     plot_1d(
         val_values_top,
@@ -155,6 +164,7 @@ def plot_parameter(
         val_tags_top,
         (10, 10),
         "boxplot",
+        len(val_values_top),
     )
     # Barplots per epoch
     plot_1d(
@@ -165,6 +175,7 @@ def plot_parameter(
         tags,
         (10, 10),
         "bar",
+        len(train_values_last_mean),
     )
     plot_1d(
         val_values_last_mean,
@@ -174,6 +185,7 @@ def plot_parameter(
         tags,
         (10, 10),
         "bar",
+        len(val_values_last_mean),
     )
 
 
