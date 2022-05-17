@@ -427,7 +427,7 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
             # check crops folder
             filename_ini = self.lists_files[0]
             crops_folder = (
-                os.path.dirname(filename)
+                os.path.dirname(filename_ini)
                 + "_"
                 + str(self.num_crops)
                 + "crops"
