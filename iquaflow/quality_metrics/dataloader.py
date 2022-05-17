@@ -416,6 +416,7 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
                     # os.remove(filename) # remove modded image to clean disk
                 # write crops permutation after all coordinate modifications (gsd, snr, rer)
                 if not os.path.exists(permut_path) or overwrite is True:
+                    os.makedirs(os.path.dirname(permut_path), exist_ok=True)
                     with open(permut_path, "wb") as f:
                         pickle.dump([self.crops_permut_y, self.crops_permut_x], f)
         else:  # generate crops from real images
@@ -511,5 +512,6 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
                 # os.remove(filename)  # remove image to clean disk
             # write crops permutation after all coordinate modifications (gsd, snr, rer)
             if not os.path.exists(permut_path) or overwrite is True:
+                os.makedirs(os.path.dirname(permut_path), exist_ok=True)
                 with open(permut_path, "wb") as f:
                     pickle.dump([self.crops_permut_y, self.crops_permut_x], f)
