@@ -387,26 +387,6 @@ def check_if_contains_homogenous(
     return edges[edges == 255].size / edges.size < percent_edges_threshold
 
 
-def replace_crop_permut(
-    sub_crops_permut_y: Any,
-    sub_crops_permut_x: Any,
-    num_images: int,
-    img_size: Any,
-    crop_size: Any,
-) -> Any:
-    x_diff = img_size[1] - crop_size[1] if img_size[1] > crop_size[1] else 1
-    y_diff = img_size[0] - crop_size[0] if img_size[0] > crop_size[0] else 1
-    sub_crops_permut_y = np.random.choice(
-        y_diff,
-        num_images,
-    )
-    sub_crops_permut_x = np.random.choice(
-        x_diff,
-        num_images,
-    )
-    return np.squeeze(sub_crops_permut_y), np.squeeze(sub_crops_permut_x)
-
-
 def generate_crop_permut(
     num_crops: int, num_images: int, img_size: Any, crop_size: Any
 ) -> Any:
@@ -428,4 +408,30 @@ def generate_crop_permut(
                 num_images,
             )
         )
-    return np.squeeze(crops_permut_y), np.squeeze(crops_permut_x)
+    if num_crops > 1:
+        crops_permut_y = np.squeeze(crops_permut_y)
+        crops_permut_x = np.squeeze(crops_permut_x)
+    return crops_permut_y, crops_permut_x
+
+
+def replace_crop_permut(
+    sub_crops_permut_y: Any,
+    sub_crops_permut_x: Any,
+    num_images: int,
+    img_size: Any,
+    crop_size: Any,
+) -> Any:
+    x_diff = img_size[1] - crop_size[1] if img_size[1] > crop_size[1] else 1
+    y_diff = img_size[0] - crop_size[0] if img_size[0] > crop_size[0] else 1
+    sub_crops_permut_y = np.random.choice(
+        y_diff,
+        num_images,
+    )
+    sub_crops_permut_x = np.random.choice(
+        x_diff,
+        num_images,
+    )
+    if num_images > 1:
+        sub_crops_permut_y = np.squeeze(sub_crops_permut_y)
+        sub_crops_permut_x = np.squeeze(sub_crops_permut_x)
+    return sub_crops_permut_y, sub_crops_permut_x
