@@ -699,7 +699,7 @@ class SharpnessMeasure:
         idx = np.argwhere((-3 <= x) & (x <= 3)).flatten()
         x_ = x[idx]
         esf_ = esf[idx]
-        shift = x_.shape[0] // 2 - np.argmax(np.abs(esf_ - np.roll(esf_, 1))[1:])  - 1
+        shift = x_.shape[0] // 2 - np.argmax(np.abs(esf_ - np.roll(esf_, 1))[1:]) - 1
         esf = np.roll(esf, shift)
 
         # calculate the LSF
@@ -724,7 +724,7 @@ class SharpnessMeasure:
         if lim1 <= 0:
             lim1 = x[-1]
 
-        if lim1 > x[-shift] and shift!=0:
+        if lim1 > x[-shift] and shift != 0:
             idx1 = np.argwhere((x[shift] < x) & (x < x[-shift])).flatten()
         else:
             idx1 = np.argwhere((-lim1 <= x) & (x <= lim1)).flatten()
