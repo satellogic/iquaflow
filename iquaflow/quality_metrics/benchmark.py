@@ -160,7 +160,7 @@ def plot_parameter(
     train_values_last_mean = [np.mean(row) for row in train_values_last]
     val_values_last_mean = [np.mean(row) for row in val_values_last]
     # filter top k (avoid large benchmark plot comparison)
-    print(parameter_name)
+    print(f"Plotting {parameter_name}")
     train_top_k_idx = get_topk(train_values_last, 11)
     train_values_top = [train_values_last[idx] for idx in train_top_k_idx]
     train_tags_top = [
@@ -217,7 +217,7 @@ def plot_parameter(
 
 
 def plot_benchmark_whole_pkl(pkl_files: List[str], output_path_root: str) -> None:
-    experiment_tags = {}
+    experiment_tags: Dict[str, Any] = {}
     for pkl_file in pkl_files:
         with open(pkl_file, "rb") as f:
             print("loading on benchmark: " + pkl_file)

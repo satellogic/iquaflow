@@ -542,10 +542,10 @@ class Regressor:
             return []
         # print(image_files)
         x = []
-        if crop_type is "center":  # Center crop
+        if crop_type == "center":  # Center crop
             for idx in range(len(image_files)):
                 filename = image_files[idx]
-                filename_noext = os.path.splitext(os.path.basename(filename))[0]
+                # filename_noext = os.path.splitext(os.path.basename(filename))[0]
                 image = Image.open(filename)
                 image_tensor = transforms.functional.to_tensor(image).unsqueeze_(0)
                 preproc_image = self.cCROP(
@@ -892,7 +892,7 @@ class Regressor:
 
             # append results for each batch
             for metric in metric_list:
-                if metric is not "losses":
+                if metric != "losses":
                     dict_results_batch[metric] = np.append(
                         dict_results_batch[metric], current_values[metric]
                     )
