@@ -16,35 +16,24 @@ def create_network(
     net: torch.nn.Module = torch_func(pretrained=pretrained)
     if out_features is not None:
         if hasattr(net, "fc"):  # ResNet18, ResNet50, etc.
-            net.fc = torch.nn.Linear(int(net.fc.in_features), out_features)
+            net.fc = torch.nn.Linear(
+                in_features=int(net.fc.in_features), out_features=out_features  # type: ignore
+            )
         elif hasattr(net, "classifier"):  # VGG19, AlexNet, etc.
             if (
                 "Linear" in type(net.classifier).__name__
             ):  # torch.nn.modules.linear.Linear
                 net.classifier = torch.nn.Linear(
-                    int(net.classifier.in_features), out_features
+                    in_features=int(net.classifier.in_features),  # type: ignore
+                    out_features=out_features,
                 )
-            elif (
-                "Sequential" in type(net.classifier).__name__
-            ):  # torch.nn.modules.container.Sequential
-                """
-                # change all layers upon first in_features
-                for layer in range(len(net.classifier)):
-                    if "Linear" in type(net.classifier[layer]):
-                        if layer == 0:
-                            net.classifier[layer] = torch.nn.Linear(
-                                int(net.classifier[layer].in_features), out_features
-                            )
-                        else:
-                            net.classifier[layer] = torch.nn.Linear(
-                                out_features, out_features
-                            )
-                """
+            elif "Sequential" in type(net.classifier).__name__:
                 # change last layer from classifier
-                for layer in reversed(range(len(net.classifier))):
-                    if "Linear" in type(net.classifier[layer]).__name__:
-                        net.classifier[layer] = torch.nn.Linear(
-                            int(net.classifier[layer].in_features), out_features
+                for layer in reversed(range(net.classifier.__len__())):  # type: ignore
+                    if "Linear" in type(net.classifier[layer]).__name__:  # type: ignore
+                        net.classifier[layer] = torch.nn.Linear(  # type: ignore
+                            in_features=int(net.classifier[layer].in_features),  # type: ignore
+                            out_features=out_features,
                         )
                     break
     return net
@@ -62,7 +51,7 @@ class MultiHead(torch.nn.Module):
         heads = []
         if hasattr(self.network, "fc"):  # ResNet18, ResNet50, etc.
             for r in head_regs:
-                heads.append(torch.nn.Linear(int(self.network.fc.in_features), r))
+                heads.append(torch.nn.Linear(int(self.network.fc.in_features), r))  # type: ignore
             self.network.fc = torch.nn.Sequential()  # remove fc
         elif hasattr(self.network, "classifier"):  # VGG19, AlexNet, etc.
             for r in head_regs:
@@ -70,19 +59,25 @@ class MultiHead(torch.nn.Module):
                     "Linear" in type(self.network.classifier).__name__
                 ):  # torch.nn.modules.linear.Linear
                     heads.append(
-                        torch.nn.Linear(int(self.network.classifier.in_features), r)
+                        torch.nn.Linear(
+                            in_features=int(self.network.classifier.in_features),  # type: ignore
+                            out_features=r,
+                        )
                     )
                 elif "Sequential" in type(self.network.classifier).__name__:
                     classifier = deepcopy(self.network.classifier)
-                    for layer in reversed(range(len(self.network.classifier))):
-                        if "Linear" in type(self.network.classifier[layer]).__name__:
-                            classifier[layer] = torch.nn.Linear(
-                                int(self.network.classifier[layer].in_features), r
+                    for layer in reversed(range(self.network.classifier.__len__())):  # type: ignore
+                        if "Linear" in type(self.network.classifier[layer]).__name__:  # type: ignore
+                            classifier[layer] = torch.nn.Linear(  # type: ignore
+                                in_features=int(
+                                    self.network.classifier[layer].in_features  # type: ignore
+                                ),
+                                out_features=r,
                             )
                         break
-                    heads.append(classifier)
+                    heads.append(classifier)  # type: ignore
             self.network.classifier = torch.nn.Sequential()  # remove classifier
-        self.network.heads = torch.nn.Sequential(*heads)  # type: ignore
+        self.network.heads = torch.nn.Sequential(*heads)
 
     def forward(self, inputs: Any) -> Any:
         x = self.network(inputs)
