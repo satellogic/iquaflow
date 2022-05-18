@@ -1,10 +1,37 @@
 import operator
 import os
+import pickle
 from glob import glob
-from typing import Any, List, Tuple
+from typing import Any, Dict, List, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
+
+
+def get_eval_metrics() -> Tuple[Dict[str, str], List[str]]:
+    metric_tags = {
+        "losses": "Loss(BCELoss)",
+        "precs": "Precision",
+        "recs": "Recall",
+        "accs": "Accuracy",
+        "fscores": "Fscore",
+        "medRs": "medR",
+        "Rk1s": "Recall@1",
+        "Rk5s": "Recall@5",
+        "Rk10s": "Recall@10",
+        "AUCs": "AUC",
+        "precs_k1": "Precision@1",
+        "precs_k5": "Precision@5",
+        "precs_k10": "Precision@10",
+        "recs_k1": "Recall@1",
+        "recs_k5": "Recall@5",
+        "recs_k10": "Recall@10",
+        "accs_k1": "Accuracy@1",
+        "accs_k5": "Accuracy@5",
+        "accs_k10": "Accuracy@10",
+    }
+    metric_list = list(metric_tags.keys())
+    return metric_tags, metric_list
 
 
 def plot_1d(
@@ -189,349 +216,79 @@ def plot_parameter(
     )
 
 
-def plot_benchmark_whole(csv_files: List[str], output_path_root: str) -> None:
-    dict_tags = {}
-    train_losses = []
-    val_losses = []
-    train_precs = []
-    val_precs = []
-    train_recs = []
-    val_recs = []
-    train_accs = []
-    val_accs = []
-    train_fscores = []
-    val_fscores = []
-    train_medRs = []
-    val_medRs = []
-    train_Rk1s = []
-    val_Rk1s = []
-    train_Rk5s = []
-    val_Rk5s = []
-    train_Rk10s = []
-    val_Rk10s = []
-    train_AUCs = []
-    val_AUCs = []
-    train_precs_k1 = []
-    val_precs_k1 = []
-    train_precs_k5 = []
-    val_precs_k5 = []
-    train_precs_k10 = []
-    val_precs_k10 = []
-    train_recs_k1 = []
-    val_recs_k1 = []
-    train_recs_k5 = []
-    val_recs_k5 = []
-    train_recs_k10 = []
-    val_recs_k10 = []
-    train_accs_k1 = []
-    val_accs_k1 = []
-    train_accs_k5 = []
-    val_accs_k5 = []
-    train_accs_k10 = []
-    val_accs_k10 = []
-    for file in csv_files:
-        print("loading on benchmark: " + file)
-        tag = os.path.basename(os.path.dirname(file))
-        results_array = np.loadtxt(file, delimiter=",")
-        if len(results_array) > 1:
-            train_losses.append(results_array[0])  # train_losses
-            val_losses.append(results_array[1])  # val_losses
-            dict_tags[tag] = ["Loss"]
-        if len(results_array) > 3:
-            train_precs.append(results_array[2])  # train_precs
-            val_precs.append(results_array[3])  # val_precs
-            dict_tags[tag].append("Precision")
-        if len(results_array) > 5:
-            train_recs.append(results_array[4])  # train_recs
-            val_recs.append(results_array[5])  # val_recs
-            dict_tags[tag].append("Recall")
-        if len(results_array) > 7:
-            train_accs.append(results_array[6])  # train_accs
-            val_accs.append(results_array[7])  # val_accs
-            dict_tags[tag].append("Accuracy")
-        if len(results_array) > 9:
-            train_fscores.append(results_array[8])  # train_fscores
-            val_fscores.append(results_array[9])  # val_fscores
-            dict_tags[tag].append("Fscore")
-        if len(results_array) > 11:
-            train_medRs.append(results_array[10])  # train_medRs
-            val_medRs.append(results_array[11])  # val_medRs
-            dict_tags[tag].append("medR")
-        if len(results_array) > 13:
-            train_Rk1s.append(results_array[12])  # train_Rk1s
-            val_Rk1s.append(results_array[13])  # val_Rk1s
-            dict_tags[tag].append("R@1")
-        if len(results_array) > 15:
-            train_Rk5s.append(results_array[14])  # train_Rk5s
-            val_Rk5s.append(results_array[15])  # val_Rk5s
-            dict_tags[tag].append("R@5")
-        if len(results_array) > 17:
-            train_Rk10s.append(results_array[16])  # train_Rk10s
-            val_Rk10s.append(results_array[17])  # val_Rk10s
-            dict_tags[tag].append("R@10")
-        if len(results_array) > 19:
-            train_AUCs.append(results_array[18])  # train_AUCs
-            val_AUCs.append(results_array[19])  # val_AUCs
-            dict_tags[tag].append("AUC")
-        if len(results_array) > 21:
-            train_precs_k1.append(results_array[20])  # train_precs_k1
-            val_precs_k1.append(results_array[21])  # val_precs_k1
-            dict_tags[tag].append("Precision@1")
-        if len(results_array) > 23:
-            train_precs_k5.append(results_array[22])  # train_precs_k5
-            val_precs_k5.append(results_array[23])  # val_precs_k5
-            dict_tags[tag].append("Precision@5")
-        if len(results_array) > 25:
-            train_precs_k10.append(results_array[24])  # train_precs_k10
-            val_precs_k10.append(results_array[25])  # val_precs_k10
-            dict_tags[tag].append("Precision@10")
-        if len(results_array) > 27:
-            train_recs_k1.append(results_array[26])  # train_recs_k1
-            val_recs_k1.append(results_array[27])  # val_recs_k1
-            dict_tags[tag].append("Recall@1")
-        if len(results_array) > 29:
-            train_recs_k5.append(results_array[28])  # train_recs_k5
-            val_recs_k5.append(results_array[29])  # val_recs_k5
-            dict_tags[tag].append("Recall@5")
-        if len(results_array) > 31:
-            train_recs_k10.append(results_array[30])  # train_recs_k10
-            val_recs_k10.append(results_array[31])  # val_recs_k10
-            dict_tags[tag].append("Recall@10")
-        if len(results_array) > 33:
-            train_accs_k1.append(results_array[32])  # train_accs_k1
-            val_accs_k1.append(results_array[33])  # val_accs_k1
-            dict_tags[tag].append("Accuracy@1")
-        if len(results_array) > 35:
-            train_accs_k5.append(results_array[34])  # train_accs_k5
-            val_accs_k5.append(results_array[35])  # val_accs_k5
-            dict_tags[tag].append("Accuracy@5")
-        if len(results_array) > 37:
-            train_accs_k10.append(results_array[36])  # train_accs_k10
-            val_accs_k10.append(results_array[37])  # val_accs_k10
-            dict_tags[tag].append("Accuracy@10")
-    tags = list(dict_tags.keys())
-    # Line plots per epoch
-    if len(train_losses) or len(val_losses):
-        tags_idx = [idx for idx, tag in enumerate(tags) if "Loss" in dict_tags[tag]]
-        selected_tags = list(np.asarray(tags)[tags_idx])
-        plot_parameter(
-            parameter_name="Loss(BCELoss)",
-            train_values=train_losses,
-            val_values=val_losses,
-            tags=selected_tags,
-            output_path=output_path_root,
-        )
-    if len(train_precs) or len(val_precs):
+def plot_benchmark_whole_pkl(pkl_files: List[str], output_path_root: str) -> None:
+    experiment_tags = {}
+    for pkl_file in pkl_files:
+        with open(pkl_file, "rb") as f:
+            print("loading on benchmark: " + pkl_file)
+            data = pickle.load(f)
+            tag = os.path.basename(os.path.dirname(pkl_file))
+            experiment_tags[tag] = {}
+            experiment_tags[tag]["train"] = data[0]
+            experiment_tags[tag]["val"] = data[1]
+    experiment_list = list(experiment_tags.keys())
+    metric_tags, metric_list = get_eval_metrics()
+
+    for metric in metric_list:
         tags_idx = [
-            idx for idx, tag in enumerate(tags) if "Precision" in dict_tags[tag]
+            idx
+            for idx, tag in enumerate(experiment_list)
+            if metric in list(experiment_tags[tag]["train"].keys())
+            and metric in list(experiment_tags[tag]["val"].keys())
         ]
-        selected_tags = list(np.asarray(tags)[tags_idx])
+        selected_tags = list(np.asarray(experiment_list)[tags_idx])
+        train_values = [experiment_tags[tag]["train"][metric] for tag in selected_tags]
+        val_values = [experiment_tags[tag]["val"][metric] for tag in selected_tags]
         plot_parameter(
-            parameter_name="Precision",
-            train_values=train_precs,
-            val_values=val_precs,
+            parameter_name=metric_tags[metric],
+            train_values=train_values,
+            val_values=val_values,
             tags=selected_tags,
             output_path=output_path_root,
         )
 
-    if len(train_recs) or len(val_recs):
-        tags_idx = [idx for idx, tag in enumerate(tags) if "Recall" in dict_tags[tag]]
-        selected_tags = list(np.asarray(tags)[tags_idx])
-        plot_parameter(
-            parameter_name="Recall",
-            train_values=train_recs,
-            val_values=val_recs,
-            tags=selected_tags,
-            output_path=output_path_root,
-        )
 
-    if len(train_accs) or len(val_accs):
-        tags_idx = [idx for idx, tag in enumerate(tags) if "Accuracy" in dict_tags[tag]]
-        selected_tags = list(np.asarray(tags)[tags_idx])
-        plot_parameter(
-            parameter_name="Accuracy",
-            train_values=train_accs,
-            val_values=val_accs,
-            tags=selected_tags,
-            output_path=output_path_root,
-        )
-
-    if len(train_fscores) or len(val_fscores):
-        tags_idx = [idx for idx, tag in enumerate(tags) if "Fscore" in dict_tags[tag]]
-        selected_tags = list(np.asarray(tags)[tags_idx])
-        plot_parameter(
-            parameter_name="Fscore",
-            train_values=train_fscores,
-            val_values=val_fscores,
-            tags=selected_tags,
-            output_path=output_path_root,
-        )
-    if len(train_medRs) or len(val_medRs):
-        tags_idx = [idx for idx, tag in enumerate(tags) if "medR" in dict_tags[tag]]
-        selected_tags = list(np.asarray(tags)[tags_idx])
-        plot_parameter(
-            parameter_name="medR",
-            train_values=train_medRs,
-            val_values=val_medRs,
-            tags=selected_tags,
-            output_path=output_path_root,
-        )
-    if len(train_Rk1s) or len(val_Rk1s):
-        tags_idx = [idx for idx, tag in enumerate(tags) if "R@1" in dict_tags[tag]]
-        selected_tags = list(np.asarray(tags)[tags_idx])
-        plot_parameter(
-            parameter_name="R@1",
-            train_values=train_Rk1s,
-            val_values=val_Rk1s,
-            tags=selected_tags,
-            output_path=output_path_root,
-        )
-    if len(train_Rk5s) or len(val_Rk5s):
-        tags_idx = [idx for idx, tag in enumerate(tags) if "R@5" in dict_tags[tag]]
-        selected_tags = list(np.asarray(tags)[tags_idx])
-        plot_parameter(
-            parameter_name="R@5",
-            train_values=train_Rk5s,
-            val_values=val_Rk5s,
-            tags=selected_tags,
-            output_path=output_path_root,
-        )
-    if len(train_Rk10s) or len(val_Rk10s):
-        tags_idx = [idx for idx, tag in enumerate(tags) if "R@10" in dict_tags[tag]]
-        selected_tags = list(np.asarray(tags)[tags_idx])
-        plot_parameter(
-            parameter_name="R@10",
-            train_values=train_Rk10s,
-            val_values=val_Rk10s,
-            tags=selected_tags,
-            output_path=output_path_root,
-        )
-    if len(train_AUCs) or len(val_AUCs):
-        tags_idx = [idx for idx, tag in enumerate(tags) if "AUC" in dict_tags[tag]]
-        selected_tags = list(np.asarray(tags)[tags_idx])
-        plot_parameter(
-            parameter_name="AUC",
-            train_values=train_AUCs,
-            val_values=val_AUCs,
-            tags=selected_tags,
-            output_path=output_path_root,
-        )
-    if len(train_precs_k1) or len(val_precs_k1):
-        tags_idx = [
-            idx for idx, tag in enumerate(tags) if "Precision@1" in dict_tags[tag]
-        ]
-        selected_tags = list(np.asarray(tags)[tags_idx])
-        plot_parameter(
-            parameter_name="Precision@1",
-            train_values=train_precs_k1,
-            val_values=val_precs_k1,
-            tags=selected_tags,
-            output_path=output_path_root,
-        )
-    if len(train_precs_k5) or len(val_precs_k5):
-        tags_idx = [
-            idx for idx, tag in enumerate(tags) if "Precision@5" in dict_tags[tag]
-        ]
-        selected_tags = list(np.asarray(tags)[tags_idx])
-        plot_parameter(
-            parameter_name="Precision@5",
-            train_values=train_precs_k5,
-            val_values=val_precs_k5,
-            tags=selected_tags,
-            output_path=output_path_root,
-        )
-    if len(train_precs_k10) or len(val_precs_k10):
-        tags_idx = [
-            idx for idx, tag in enumerate(tags) if "Precision@10" in dict_tags[tag]
-        ]
-        selected_tags = list(np.asarray(tags)[tags_idx])
-        plot_parameter(
-            parameter_name="Precision@10",
-            train_values=train_precs_k10,
-            val_values=val_precs_k10,
-            tags=selected_tags,
-            output_path=output_path_root,
-        )
-
-    if len(train_recs_k1) or len(val_recs_k1):
-        tags_idx = [idx for idx, tag in enumerate(tags) if "Recall@1" in dict_tags[tag]]
-        selected_tags = list(np.asarray(tags)[tags_idx])
-        plot_parameter(
-            parameter_name="Recall@1",
-            train_values=train_recs_k1,
-            val_values=val_recs_k1,
-            tags=selected_tags,
-            output_path=output_path_root,
-        )
-    if len(train_recs_k5) or len(val_recs_k5):
-        tags_idx = [idx for idx, tag in enumerate(tags) if "Recall@5" in dict_tags[tag]]
-        selected_tags = list(np.asarray(tags)[tags_idx])
-        plot_parameter(
-            parameter_name="Recall@5",
-            train_values=train_recs_k5,
-            val_values=val_recs_k5,
-            tags=selected_tags,
-            output_path=output_path_root,
-        )
-    if len(train_recs_k10) or len(val_recs_k10):
-        tags_idx = [
-            idx for idx, tag in enumerate(tags) if "Recall@10" in dict_tags[tag]
-        ]
-        selected_tags = list(np.asarray(tags)[tags_idx])
-        plot_parameter(
-            parameter_name="Recall@10",
-            train_values=train_recs_k10,
-            val_values=val_recs_k10,
-            tags=selected_tags,
-            output_path=output_path_root,
-        )
-
-    if len(train_accs_k1) or len(val_accs_k1):
-        tags_idx = [
-            idx for idx, tag in enumerate(tags) if "Accuracy@1" in dict_tags[tag]
-        ]
-        selected_tags = list(np.asarray(tags)[tags_idx])
-        plot_parameter(
-            parameter_name="Accuracy@1",
-            train_values=train_accs_k1,
-            val_values=val_accs_k1,
-            tags=selected_tags,
-            output_path=output_path_root,
-        )
-    if len(train_accs_k5) or len(val_accs_k5):
-        tags_idx = [
-            idx for idx, tag in enumerate(tags) if "Accuracy@5" in dict_tags[tag]
-        ]
-        selected_tags = list(np.asarray(tags)[tags_idx])
-        plot_parameter(
-            parameter_name="Accuracy@5",
-            train_values=train_accs_k5,
-            val_values=val_accs_k5,
-            tags=selected_tags,
-            output_path=output_path_root,
-        )
-    if len(train_accs_k10) or len(val_accs_k10):
-        tags_idx = [
-            idx for idx, tag in enumerate(tags) if "Accuracy@10" in dict_tags[tag]
-        ]
-        selected_tags = list(np.asarray(tags)[tags_idx])
-        plot_parameter(
-            parameter_name="Accuracy@10",
-            train_values=train_accs_k10,
-            val_values=val_accs_k10,
-            tags=selected_tags,
-            output_path=output_path_root,
-        )
+def write_pkl_from_csv(csv_file: str) -> str:
+    print("Writing pkl from " + csv_file)
+    train_dict_results_whole = {}
+    val_dict_results_whole = {}
+    folder = os.path.dirname(csv_file)
+    results_array = np.loadtxt(csv_file, delimiter=",")
+    metric_tags, metric_list = get_eval_metrics()
+    for idx in range(0, len(metric_list) * 2, 2):
+        if len(results_array) > idx + 1:
+            metric_idx = int(idx * 0.5)  # every 2 so divide by 2 and floor
+            metric = metric_list[metric_idx]
+            train_dict_results_whole[metric] = results_array[idx]
+            val_dict_results_whole[metric] = results_array[idx + 1]
+    # write pkl
+    results_pkl = os.path.join(folder, "results.pkl")
+    with open(results_pkl, "wb") as f:
+        pickle.dump([train_dict_results_whole, val_dict_results_whole], f)
+    return results_pkl
 
 
 def plot_single(output_path: str) -> None:
-    csv_files = [output_path + "/" + "stats.csv"]
-    plot_benchmark_whole(csv_files, output_path)
+    pkl_file = os.path.join(output_path, "results.pkl")
+    csv_file = os.path.join(output_path, "stats.csv")
+    if not os.path.exists(pkl_file):
+        pkl_file = write_pkl_from_csv(csv_file)
+    pkl_files = [pkl_file]
+    plot_benchmark_whole_pkl(pkl_files, output_path)
 
 
 def plot_benchmark(output_path_root: str = "tmp-/") -> None:
     csv_files = glob(os.path.join(output_path_root, "*/") + "stats.csv", recursive=True)
-    plot_benchmark_whole(csv_files, output_path_root)
+    pkl_files = []
+    for csv_file in csv_files:
+        folder = os.path.dirname(csv_file)
+        pkl_file = os.path.join(folder, "results.pkl")
+        if not os.path.exists(csv_file) and not os.path.exists(pkl_file):
+            pass
+        elif not os.path.exists(pkl_file):
+            pkl_file = write_pkl_from_csv(csv_file)
+        pkl_files.append(pkl_file)
+    plot_benchmark_whole_pkl(pkl_files, output_path_root)
 
 
 if __name__ == "__main__":
