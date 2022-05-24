@@ -316,6 +316,9 @@ class SharpnessMeasure:
                     lines_[:, 0::2] += j
                     lines_[:, 1::2] += i
                     lines = np.concatenate([lines, lines_], axis=0)
+
+        if lines is None or len(lines) == 0:
+            lines = np.empty(shape=[0, 4])
         return lines
 
     def edge_detector(
@@ -348,8 +351,8 @@ class SharpnessMeasure:
             theta=np.linspace(-np.pi / 2, np.pi / 2, 360 * 1, endpoint=False),
         )
 
-        if len(lines) == 0:
-            return None
+        if len(lines) == 0 and threshold > 0:
+            return self.edge_detector(image, 0, line_gap)
         # Cuts the lines to segments with lengths of self.edge_length
         lines_ = self._sort_lines(lines)
         # Format: [x0, y0, x1, y1]
@@ -962,6 +965,7 @@ def sharpness_function_from_fn(
         kwargs: the SharpnessMeasure class has many tuneable parameters. If you wish to set any of them differently from
         the default, pass them here as keyword arguments.
     """
+    print(f"Running {','.join(metrics)} over {image}")
     if ext == "tif":
         with rasterio.open(image, "r") as data:
             img = data.read()
