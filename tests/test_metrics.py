@@ -213,15 +213,11 @@ class TestRER:
                 assert (
                     key in myrun["metrics_dict"]
                 ), f"Missing metric {key} in the results"
-                try:
-                    assert (
-                        abs(expected_results_in_coco_ds[key] - myrun["metrics_dict"][key])
-                        / expected_results_in_coco_ds[key]
-                        < 0.15
-                    ), f"Unexpected result for  {key} ({myrun['metrics_dict'][key]})"
-                except:
-                    print(f"Unexpected result for  {key} ({myrun['metrics_dict'][key]})")
-                    continue
+                assert (
+                    abs(expected_results_in_coco_ds[key] - myrun["metrics_dict"][key])
+                    / expected_results_in_coco_ds[key]
+                    < 0.15
+                ), f"Unexpected result for  {key} ({myrun['metrics_dict'][key]})"
 
             run_name = "ds#rer0.3_modifier"
             myrun = experiment_info.runs[run_name]
