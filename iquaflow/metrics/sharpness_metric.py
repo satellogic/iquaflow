@@ -350,9 +350,9 @@ class SharpnessMeasure:
             seed=42,
             theta=np.linspace(-np.pi / 2, np.pi / 2, 360 * 1, endpoint=False),
         )
-
-        if len(lines) == 0 and threshold > 0:
-            return self.edge_detector(image, 0, line_gap)
+        # (Optional) If lines is empty, run on threshold 0
+        # if len(lines) == 0 and threshold > 0:
+        #     return self.edge_detector(image, 0, line_gap)
         # Cuts the lines to segments with lengths of self.edge_length
         lines_ = self._sort_lines(lines)
         # Format: [x0, y0, x1, y1]
