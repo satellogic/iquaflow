@@ -316,9 +316,6 @@ class SharpnessMeasure:
                     lines_[:, 0::2] += j
                     lines_[:, 1::2] += i
                     lines = np.concatenate([lines, lines_], axis=0)
-
-        if lines is None or len(lines) == 0:
-            lines = np.empty(shape=[0, 4])
         return lines
 
     def edge_detector(
@@ -350,9 +347,9 @@ class SharpnessMeasure:
             seed=42,
             theta=np.linspace(-np.pi / 2, np.pi / 2, 360 * 1, endpoint=False),
         )
-        # (Optional) If lines is empty, run on threshold 0
-        # if len(lines) == 0 and threshold > 0:
-        #     return self.edge_detector(image, 0, line_gap)
+
+        if len(lines) == 0:
+            return None
         # Cuts the lines to segments with lengths of self.edge_length
         lines_ = self._sort_lines(lines)
         # Format: [x0, y0, x1, y1]
@@ -702,7 +699,7 @@ class SharpnessMeasure:
         idx = np.argwhere((-3 <= x) & (x <= 3)).flatten()
         x_ = x[idx]
         esf_ = esf[idx]
-        shift = x_.shape[0] // 2 - np.argmax(np.abs(esf_ - np.roll(esf_, 1))[1:]) - 1
+        shift = x_.shape[0] // 2 - np.argmax(np.abs(esf_ - np.roll(esf_, 1))[1:])
         esf = np.roll(esf, shift)
 
         # calculate the LSF
@@ -726,11 +723,7 @@ class SharpnessMeasure:
             lim2 = x[-1]
         if lim1 <= 0:
             lim1 = x[-1]
-
-        if lim1 > x[-shift] and shift != 0:
-            idx1 = np.argwhere((x[shift] < x) & (x < x[-shift])).flatten()
-        else:
-            idx1 = np.argwhere((-lim1 <= x) & (x <= lim1)).flatten()
+        idx1 = np.argwhere((-lim1 <= x) & (x <= lim1)).flatten()
         idx2 = np.argwhere((-lim2 <= x) & (x <= lim2)).flatten()
         if lim2 >= x[-shift]:
             idx2 = idx2[shift:-shift]
@@ -749,7 +742,6 @@ class SharpnessMeasure:
             # return [x_esf,x_lsf, esf, esf_popt, lsf, lsf_popt, esf_norm, esf_norm_popt]
             final_esf = model_esf(x_esf, *esf_popt)
             final_lsf = np.abs(np.diff(final_esf))
-
             return [x_esf, final_esf, final_lsf, esf_norm_popt]
         else:
             return None
@@ -846,8 +838,10 @@ class SharpnessMeasure:
 
         noise = np.nanmean([noise1, noise2])
         if noise <= 0:
+            # logging.debug("noise is not positive")
             return False
         edge_snr = 1 / noise
+
         if edge_snr >= self.snr_threshold and r_squared >= self.r2_threshold:
             self.edge_snrs[-1].append(edge_snr)
             return True
@@ -942,9 +936,12 @@ def sharpness_function_from_array(
     if len(img.shape) < 3:
         img = np.expand_dims(img, -1)
     metrics = [s.upper() for s in metrics]
-    kwargs["get_rer"] = "RER" in metrics
-    kwargs["get_fwhm"] = "FWHM" in metrics
-    kwargs["get_mtf"] = "MTF" in metrics
+    if "RER" in metrics:
+        kwargs["get_rer"] = True
+    if "FWHM" in metrics:
+        kwargs["get_fwhm"] = True
+    if "MTF" in metrics:
+        kwargs["get_mtf"] = True
     sharpness = SharpnessMeasure(**kwargs)
     result = sharpness.apply(img)
     return result
@@ -965,7 +962,6 @@ def sharpness_function_from_fn(
         kwargs: the SharpnessMeasure class has many tuneable parameters. If you wish to set any of them differently from
         the default, pass them here as keyword arguments.
     """
-    print(f"Running {','.join(metrics)} over {image}")
     if ext == "tif":
         with rasterio.open(image, "r") as data:
             img = data.read()
