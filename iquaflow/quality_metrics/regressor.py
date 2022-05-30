@@ -365,8 +365,13 @@ class Regressor:
         self.cuda = args.cuda
         self.gpus = args.gpus
         self.seed = args.seed
+        self.device = torch.device(
+            "cuda:" + ",".join(self.gpus) if torch.cuda.is_available() else "cpu"
+        )
+        self.net = self.net.to(self.device)
+
         if self.cuda:
-            print("=> use gpu id: '{}'".format(self.gpus))
+            print("=> using gpu id: '{}'".format(self.gpus))
             os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
             os.environ["CUDA_VISIBLE_DEVICES"] = self.gpus
             if not torch.cuda.is_available():
@@ -528,6 +533,9 @@ class Regressor:
         if self.checkpoint_path:
             self.net = torch.load(self.checkpoint_path)  # type: ignore
             # self.net.load_state_dict(torch.load(self.checkpoint_path))
+            self.net = self.net.to(self.device)
+            if self.cuda:
+                self.net = self.net.cuda()
             return True
         else:
             return False
@@ -590,6 +598,13 @@ class Regressor:
                     x.append(xx)
                 else:
                     x.append(image_tensor)
+
+        # move crops to device (+cuda)
+        for idx, crops in enumerate(x):
+            x[idx] = x[idx].to(self.device)
+            if self.cuda:
+                x[idx] = x[idx].cuda()
+
         # run for each image crop
         reg_values = dict((par, []) for par in self.params)  # type: ignore
         for idx, crops in enumerate(x):
@@ -635,23 +650,14 @@ class Regressor:
     def deploy_single(
         self, image_tensor: Any
     ) -> Any:  # load checkpoint and run an image tensor
-        # load latest checkpoint
-        if not os.path.exists(
-            self.checkpoint_path
-        ):  # if doesnt exist, list all and read latest
-            list_of_checkpoints = glob.glob(self.output_path + "/*.pth")
-            if len(list_of_checkpoints) > 0:
-                self.checkpoint_path = max(list_of_checkpoints, key=os.path.getctime)
-            else:
-                self.checkpoint_path = None  # type: ignore
-
-        if self.checkpoint_path:
-            self.net = torch.load(self.checkpoint_path)  # type: ignore
-            # self.net.load_state_dict(torch.load(self.checkpoint_path))
-        else:
-            print("Could not find any checkpoint, closing deploy...")
+        loaded_ckpt = self.load_ckpt()
+        if loaded_ckpt is False:
+            print("Could not find any checkpoint, closing deploy")
             return []
-
+        # move image_tensor to cuda
+        image_tensor = image_tensor.to(self.device)
+        if self.cuda:
+            image_tensor = image_tensor.cuda()
         return self.net(image_tensor)
 
     def train_val_epoch(
