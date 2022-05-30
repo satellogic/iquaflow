@@ -368,7 +368,10 @@ class Regressor:
         self.device = torch.device(
             "cuda:" + ",".join(self.gpus) if torch.cuda.is_available() else "cpu"
         )
-        self.net = self.net.to(self.device)
+        self.net = self.net.to(self.device)  # set net to device
+
+        if "cuda" in self.device.type:
+            self.cuda = True
 
         if self.cuda:
             print("=> using gpu id: '{}'".format(self.gpus))
@@ -378,11 +381,8 @@ class Regressor:
                 raise Exception(
                     "No GPU found or Wrong gpu id, please run without --cuda"
                 )
-        if self.cuda:
             print("Random Seed: ", self.seed)
             torch.cuda.manual_seed(self.seed)
-
-        if self.cuda:
             self.criterion = self.criterion.cuda()
             self.net = self.net.cuda()
 
@@ -602,6 +602,9 @@ class Regressor:
         # move crops to device (+cuda)
         for idx, crops in enumerate(x):
             x[idx] = x[idx].to(self.device)
+            import pdb
+
+            pdb.set_trace()
             if self.cuda:
                 x[idx] = x[idx].cuda()
 
