@@ -554,8 +554,12 @@ class Regressor:
             for idx in range(len(image_files)):
                 filename = image_files[idx]
                 # filename_noext = os.path.splitext(os.path.basename(filename))[0]
-                image = Image.open(filename)
-                image_tensor = transforms.functional.to_tensor(image).unsqueeze_(0)
+                try:
+                    image = Image.open(filename)
+                    image_tensor = transforms.functional.to_tensor(image).unsqueeze_(0)
+                except Exception:
+                    print(filename + " not found or corrupt/truncated")
+                    continue
                 preproc_image = self.cCROP(
                     image_tensor
                 )  # todo: maybe replace this deploy by several crops and select most frequent?
@@ -569,8 +573,12 @@ class Regressor:
             for idx in range(len(image_files)):
                 filename = image_files[idx]
                 # filename_noext = os.path.splitext(os.path.basename(filename))[0]
-                image = Image.open(filename)
-                image_tensor = transforms.functional.to_tensor(image).unsqueeze_(0)
+                try:
+                    image = Image.open(filename)
+                    image_tensor = transforms.functional.to_tensor(image).unsqueeze_(0)
+                except Exception:
+                    print(filename + " not found or corrupt/truncated")
+                    continue
                 if (
                     image_tensor.shape[2] < self.crop_size[0]
                     or image_tensor.shape[3] < self.crop_size[1]
