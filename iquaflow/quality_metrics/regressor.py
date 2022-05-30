@@ -602,9 +602,6 @@ class Regressor:
         # move crops to device (+cuda)
         for idx, crops in enumerate(x):
             x[idx] = x[idx].to(self.device)
-            import pdb
-
-            pdb.set_trace()
             if self.cuda:
                 x[idx] = x[idx].cuda()
 
