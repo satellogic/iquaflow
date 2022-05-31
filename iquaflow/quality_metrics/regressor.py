@@ -14,8 +14,6 @@ import numpy as np
 import torch
 from PIL import Image
 from torch.autograd import Variable
-from torchvision import transforms
-from torchvision.utils import save_image
 
 from iquaflow.datasets import (
     DSModifier,
@@ -31,11 +29,9 @@ from iquaflow.quality_metrics.benchmark import (
     plot_single,
 )
 from iquaflow.quality_metrics.dataloader import Dataset
-from iquaflow.quality_metrics.tools import (
+from iquaflow.quality_metrics.tools import (  # circ3d_pad,; force_rgb,
     MultiHead,
-    circ3d_pad,
     create_network,
-    force_rgb,
     get_accuracy,
     get_accuracy_k,
     get_AUC,
@@ -545,114 +541,99 @@ class Regressor:
     ) -> Any:  # load checkpoint and run an image path
         # load latest checkpoint
         loaded_ckpt = self.load_ckpt()
+        torch.no_grad()
+        self.net.eval()
         if loaded_ckpt is False:
             print("Could not find any checkpoint, closing deploy")
             return []
-        # print(image_files)
-        x = []
-        if crop_type == "center":  # Center crop
-            for idx in range(len(image_files)):
-                filename = image_files[idx]
-                # filename_noext = os.path.splitext(os.path.basename(filename))[0]
-                try:
-                    image = Image.open(filename)
-                    image_tensor = transforms.functional.to_tensor(image).unsqueeze_(0)
-                except Exception:
-                    print(filename + " not found or corrupt/truncated")
-                    continue
-                preproc_image = self.cCROP(
-                    image_tensor
-                )  # todo: maybe replace this deploy by several crops and select most frequent?
-                preproc_image = torch.unsqueeze(force_rgb(preproc_image[0, :]), dim=0)
-                x.append(preproc_image)
-                save_image(
-                    preproc_image,
-                    os.path.join(self.output_path, os.path.basename(filename)),
-                )
-        else:  # N Random Crops
-            for idx in range(len(image_files)):
-                filename = image_files[idx]
-                # filename_noext = os.path.splitext(os.path.basename(filename))[0]
-                try:
-                    image = Image.open(filename)
-                    image_tensor = transforms.functional.to_tensor(image).unsqueeze_(0)
-                except Exception:
-                    print(filename + " not found or corrupt/truncated")
-                    continue
-                if (
-                    image_tensor.shape[2] < self.crop_size[0]
-                    or image_tensor.shape[3] < self.crop_size[1]
-                ):
-                    image_tensor = torch.tensor(
-                        circ3d_pad(image_tensor.squeeze(), self.crop_size)
-                    ).unsqueeze(0)
-                if (
-                    image_tensor.shape[2] != self.crop_size[0]
-                ):  # whole satellite image or crop?
-                    xx = []
+        if len(image_files) == 0:
+            print("Empty image list, closing deploy")
+            return []
+        # create dataset + dataloader instance
+        testds = os.path.dirname(
+            os.path.dirname(image_files[0])
+        )  # path to dataset folder
+        testdsinput = os.path.dirname(image_files[0])  # path to images folder
+        default_img_size = Image.open(image_files[0]).size
+        test_dataset = Dataset(
+            "test",
+            testds,
+            testdsinput,
+            self.num_crops,  # regressor-specific on training as well
+            self.crop_size,  # regressor-specific on training as well
+            1.0,
+            default_img_size,
+        )
+        test_dataset.lists_files = image_files
+        test_dataset.__crop__(False, True)
+        test_loader = torch.utils.data.DataLoader(
+            dataset=test_dataset,
+            batch_size=self.batch_size,
+            shuffle=False,
+        )
+        # prepare data
+        dict_data_batch: Dict[str, Any] = {}
+        (
+            dict_data_batch["crop_filenames"],
+            dict_data_batch["filenames"],
+            dict_data_batch["predictions"],
+            dict_data_batch["values"],
+        ) = (
+            [],
+            [],
+            [],
+            [],
+        )
+        # loop run network per batch and save values to dict_data_batch
+        reg_values: Dict[str, Any] = dict((par, []) for par in self.params)
+        for bidx, (filename, param, x, y) in enumerate(test_loader):
+            param = [
+                self.params[0] if par == "" else par for par in param
+            ]  # if param is empty, set to first param in params list
 
-                    for cidx in range(self.num_crops):
-                        # print("Generating crop ("+str(cidx+1)+"/"+str(self.num_crops)+")")
-                        preproc_image = self.tCROP(image_tensor)
-                        preproc_image = torch.unsqueeze(
-                            force_rgb(preproc_image[0, :]), dim=0
-                        )
-                        xx.append(preproc_image)
-                        save_image(
-                            preproc_image,
-                            os.path.join(self.output_path, os.path.basename(filename)),
-                        )
-                    xx = torch.cat(xx, dim=0)  # type: ignore
-                    x.append(xx)
-                else:
-                    x.append(image_tensor)
-
-        # move crops to device (+cuda)
-        for idx, crops in enumerate(x):
-            x[idx] = x[idx].to(self.device)
+            # data to device
+            x = x.to(self.device)
             if self.cuda:
-                x[idx] = x[idx].cuda()
-
-        # run for each image crop
-        reg_values = dict((par, []) for par in self.params)  # type: ignore
-        for idx, crops in enumerate(x):
-            pred = self.net(crops)
+                x = x.cuda()
+            # run
+            prediction = self.net(x)
+            # pred = torch.nn.Sigmoid()(prediction)
+            # get results as regressor parameter values
             if len(self.params) == 1:  # Single head prediction
                 par = self.params[0]
-                pmax = []
-                for i, prediction in enumerate(pred):
-                    pmax.append(pred[i].argmax())
-                reg_values[par].append(
-                    max(set(pmax), key=pmax.count)
-                )  # save reg index values with most occurencies (for each image crops, select most common param in pred list)
-            else:  # Multi head prediction
+                for i, param_prediction in enumerate(prediction):
+                    argmax = param_prediction.argmax()
+                    value = self.yclasses[par][argmax]
+                    reg_values[par].append(value)
+            else:
                 for pidx, par in enumerate(self.params):
-                    pmax = []
-                    for i, prediction in enumerate(pred[pidx]):
-                        pmax.append(pred[pidx][i].argmax())
-                    reg_values[par].append(
-                        max(set(pmax), key=pmax.count)
-                    )  # save reg index values with most occurencies (for each image crops, select most common param in pred list)
-        # prepare output_json
-        if len(self.params) == 1:
-            output_values = []
-            par = self.params[0]
-            for i, regval in enumerate(reg_values[par]):
-                value = self.yclasses[par][regval]
-                output_values.append(value)
-                output_json = {par: value, "path": image_files[i]}
-                print(" pred " + str(output_json))
-        else:
-            output_values = [[] for par in self.params]
-            for i, crops in enumerate(x):
-                output_json = {}
-                for pidx, par in enumerate(self.params):
-                    regval = reg_values[par][i]
-                    value = self.yclasses[par][regval]
-                    output_json[par] = value
-                    output_values[pidx].append(value)
-                output_json["path"] = image_files[i]
-                print(" pred " + str(output_json))
+                    for i, param_prediction in enumerate(prediction):
+                        argmax = param_prediction[par].argmax()
+                        value = self.yclasses[par][argmax]
+                        reg_values[par].append(value)
+            dict_data_batch["crop_filenames"].append(filename)
+            dict_data_batch["predictions"].append(prediction)
+            dict_data_batch["values"].append(reg_values)
+            origin_filename = []
+            for file in filename:
+                origin_filename.append(test_dataset.dict_crop_files_origin[file])
+            dict_data_batch["filenames"].append(origin_filename)
+
+        # unify filenames values (several crops, thus several results per image)
+        output_values = []
+        for image_filename in image_files:
+            file_values = []
+            for bidx, _ in enumerate(dict_data_batch["filenames"]):
+                for cidx, crop_filename_origin in enumerate(
+                    dict_data_batch["filenames"][bidx]
+                ):
+                    for pidx, par in enumerate(self.params):
+                        if crop_filename_origin == image_filename:
+                            file_values.append(
+                                dict_data_batch["values"][bidx][par][cidx]
+                            )
+            mean_values = np.nanmean(np.array(file_values))
+            output_values.append(mean_values)
         return output_values
 
     def deploy_single(
