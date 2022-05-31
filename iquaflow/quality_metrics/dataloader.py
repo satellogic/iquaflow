@@ -1,7 +1,7 @@
 import os
 import pickle
 import shutil
-from typing import Any, List, Tuple
+from typing import Any, Dict, List, Tuple
 
 import numpy as np
 import torch
@@ -53,6 +53,7 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
         self.lists_files = split_list(lists_files, split_percent)
         self.lists_mod_files: List[Any] = []
         self.lists_crop_files: List[Any] = []
+        self.dict_crop_files_origin: Dict[str, Any] = {}
         # keys
         self.mod_keys: List[str] = []
         self.crop_mod_keys: List[str] = []
@@ -117,7 +118,6 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
             x = force_rgb(image_tensor)
             y = torch.tensor(0)
             param = ""
-
         return filename, param, Variable(x), Variable(y)
 
     def __modify__(self, ds_modifiers: Any, overwrite: Any = False) -> Any:
@@ -197,7 +197,7 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
             self.default_img_size = np.nanmin(np.array(self.mod_sizes), axis=0)
             self.output_dirs.append(output_dir)
 
-    def __crop__(self, overwrite: bool = False) -> None:
+    def __crop__(self, overwrite: bool = False, ow_recursive: bool = False) -> None:
         if len(self.lists_mod_files) != 0:  # generate crops from modifiers
             # generating crops permutation
             num_images = len(self.lists_mod_files[0])
@@ -262,8 +262,13 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
                         ):
                             print(f"{filename_cropped} does not exist")
                             if not os.path.exists(permut_path):
-                                print(f"{permut_path} also does not exist, exiting...")
-                                exit()
+                                if ow_recursive is True:
+                                    self.__crop__(True)
+                                else:
+                                    print(
+                                        f"{permut_path} also does not exist, exiting..."
+                                    )
+                                    exit()
                         # generate crop
                         if not os.path.exists(filename_cropped) or overwrite is True:
                             print(
@@ -410,6 +415,7 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
                             print(f"{filename_cropped} already exists")
                         """
                         self.lists_crop_files.append(filename_cropped)
+                        self.dict_crop_files_origin[filename_cropped] = filename
                         self.crop_mod_keys.append(self.mod_keys[midx])
                         self.crop_mod_params.append(self.mod_params[midx])
                         # print(self.lists_crop_files[-1])  # print last sample name
@@ -477,8 +483,11 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
                     if not os.path.exists(filename_cropped) and overwrite is False:
                         print(f"{filename_cropped} does not exist")
                         if not os.path.exists(permut_path):
-                            print(f"{permut_path} also does not exist, exiting...")
-                            exit()
+                            if ow_recursive is True:
+                                self.__crop__(True)
+                            else:
+                                print(f"{permut_path} also does not exist, exiting...")
+                                exit()
                     if not os.path.exists(filename_cropped) or overwrite is True:
                         print(
                             "Generating crop ("
@@ -508,6 +517,7 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
                         print(f"{os.path.basename(filename_cropped)} already exists")
                     """
                     self.lists_crop_files.append(filename_cropped)
+                    self.dict_crop_files_origin[filename_cropped] = filename
                     # print(self.lists_crop_files[-1])  # print last sample name
                 # os.remove(filename)  # remove image to clean disk
             # write crops permutation after all coordinate modifications (gsd, snr, rer)
