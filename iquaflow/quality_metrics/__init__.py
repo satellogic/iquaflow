@@ -5,8 +5,8 @@ from .gsd_metrics import GSDMetrics
 from .noise_sharpness_metrics import NoiseSharpnessMetrics
 from .quality_metrics import QualityMetrics
 from .rer_metrics import RERMetrics
-from .score_metrics import ScoreMetrics
 from .snr_metrics import SNRMetrics
+from .score_metrics import ScoreMetrics
 
 __all__ = [
     "Metric",
@@ -14,7 +14,7 @@ __all__ = [
     "GaussianBlurMetrics",
     "NoiseSharpnessMetrics",
     "GSDMetrics",
-    "RERMetrics",
     "SNRMetrics",
+    "RERMetrics",
     "ScoreMetrics",
 ]

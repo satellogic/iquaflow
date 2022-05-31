@@ -7,8 +7,15 @@ from iquaflow.quality_metrics.regressor import Regressor, parse_params_cfg
 
 
 class QualityMetrics(Metric):
-    def __init__(self) -> None:
-        parser = parse_params_cfg(default_cfg_path="config.cfg")
+    def __init__(
+        self,
+        cfg_path: str = os.path.join(
+            os.path.dirname(os.path.realpath(__file__)),
+            "cfgs_example/config_gaussian.cfg",
+        ),
+    ) -> None:
+        # usual init for quality metrics
+        parser = parse_params_cfg(default_cfg_path=cfg_path)
         args, uk_args = parser.parse_known_args()  # [] or use defaults
         # dict_args = vars(args)  # for debugging
         self.regressor = Regressor(args)

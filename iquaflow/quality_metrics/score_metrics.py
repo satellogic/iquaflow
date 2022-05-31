@@ -1,11 +1,16 @@
 import os
-import urllib.request
 from typing import Any, List, Optional
 
 import numpy as np
 
-from iquaflow.quality_metrics import QualityMetrics
-from iquaflow.quality_metrics.regressor import Regressor, parse_params_cfg
+from iquaflow.quality_metrics import (
+    GaussianBlurMetrics,
+    GSDMetrics,
+    NoiseSharpnessMetrics,
+    QualityMetrics,
+    RERMetrics,
+    SNRMetrics,
+)
 
 
 class ScoreMetrics(QualityMetrics):
@@ -63,6 +68,7 @@ class ScoreMetrics(QualityMetrics):
         self.ranges = ranges
         self.weights = weights
         self.default_checkpoint_urls = default_checkpoint_urls
+        """  # do not init (need too much memory to keep all QMRNets on init)
         self.regressors = []
         self.submetric_names = []
         for idx, metric in enumerate(metric_names):
@@ -78,6 +84,7 @@ class ScoreMetrics(QualityMetrics):
             self.submetric_names.append(
                 list(self.regressors[idx].modifier_params.keys())
             )
+        """
 
     def calc_score(self, stats: List[Any]) -> Any:
         score = 0.0
@@ -97,8 +104,36 @@ class ScoreMetrics(QualityMetrics):
     def deploy_stats(self, image_files: List[str]) -> Any:
         stats = []
         for idx, metric in enumerate(self.metric_names):
+            """
             # run regressor deploy to get stats
             stats.append(self.regressors[idx].deploy(image_files))
+            """
+            # init regressor instance
+            quality_metric = QualityMetrics()
+            if metric == "sigma":
+                quality_metric = GaussianBlurMetrics(
+                    self.config_filenames[idx], self.default_checkpoint_urls[idx]
+                )
+            elif metric == "sharpness":
+                quality_metric = NoiseSharpnessMetrics(
+                    self.config_filenames[idx], self.default_checkpoint_urls[idx]
+                )
+            elif metric == "scale":
+                quality_metric = GSDMetrics(
+                    self.config_filenames[idx], self.default_checkpoint_urls[idx]
+                )
+            elif metric == "rer":
+                quality_metric = RERMetrics(
+                    self.config_filenames[idx], self.default_checkpoint_urls[idx]
+                )
+            elif metric == "snr":
+                quality_metric = SNRMetrics(
+                    self.config_filenames[idx], self.default_checkpoint_urls[idx]
+                )
+            else:
+                continue
+            # deploy regressor instance
+            stats.append(quality_metric.regressor.deploy(image_files))
         return stats
 
     def get_results(self, stats: Any) -> Any:  # override function
