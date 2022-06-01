@@ -541,14 +541,16 @@ class Regressor:
     ) -> Any:  # load checkpoint and run an image path
         # load latest checkpoint
         loaded_ckpt = self.load_ckpt()
-        torch.no_grad()
-        self.net.eval()
         if loaded_ckpt is False:
             print("Could not find any checkpoint, closing deploy")
             return []
         if len(image_files) == 0:
             print("Empty image list, closing deploy")
             return []
+        # set torch to not save gradients
+        torch.no_grad()
+        torch.set_grad_enabled(False)
+        self.net.eval()
         # create dataset + dataloader instance
         testds = os.path.dirname(
             os.path.dirname(image_files[0])
@@ -676,9 +678,11 @@ class Regressor:
         # set training type (gradients)
         if validate is False:
             torch.enable_grad()
+            torch.set_grad_enabled(True)
             self.net.train()
         else:
             torch.no_grad()
+            torch.set_grad_enabled(False)
             self.net.eval()
 
         # validate_only case, exit if training

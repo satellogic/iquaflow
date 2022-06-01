@@ -14,6 +14,7 @@ from iquaflow.datasets import DSWrapper
 from iquaflow.quality_metrics.tools import (
     check_if_contains_edges,
     check_if_contains_homogenous,
+    circ3d_pad,
     force_rgb,
     generate_crop_permut,
     replace_crop_permut,
@@ -288,6 +289,13 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
                             image_tensor = transforms.functional.to_tensor(
                                 image
                             ).unsqueeze_(0)
+                            if (
+                                image_tensor.shape[2] < self.crop_size[0]
+                                or image_tensor.shape[3] < self.crop_size[1]
+                            ):
+                                image_tensor = circ3d_pad(
+                                    image_tensor.squeeze(), self.crop_size
+                                ).unsqueeze_(0)
                             # all modifier cases
                             preproc_image = transforms.functional.crop(
                                 image_tensor,
@@ -502,6 +510,13 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
                         image_tensor = transforms.functional.to_tensor(
                             image
                         ).unsqueeze_(0)
+                        if (
+                            image_tensor.shape[2] < self.crop_size[0]
+                            or image_tensor.shape[3] < self.crop_size[1]
+                        ):
+                            image_tensor = circ3d_pad(
+                                image_tensor.squeeze(), self.crop_size
+                            ).unsqueeze_(0)
                         # preproc_image = self.tCROP(image_tensor)
                         preproc_image = transforms.functional.crop(
                             image_tensor,

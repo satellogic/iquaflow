@@ -146,6 +146,12 @@ def circ3d_pad(mat: Any, desired_shape: Any) -> Any:
     newmat = torch.zeros((mat.shape[0], desired_shape[0], desired_shape[1]))
     v_border = int((desired_shape[0] - mat.shape[1]) * 0.5)
     h_border = int((desired_shape[1] - mat.shape[2]) * 0.5)
+    if v_border < 0:
+        v_border = 0
+    if h_border < 0:
+        h_border = 0
+    if v_border == 0 and h_border == 0:
+        return mat
     if mat.shape[0] > 1:
         for channel in range(mat.shape[0]):
             newmat_c = np.pad(
