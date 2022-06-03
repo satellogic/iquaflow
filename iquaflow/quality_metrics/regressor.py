@@ -547,10 +547,6 @@ class Regressor:
         if len(image_files) == 0:
             print("Empty image list, closing deploy")
             return []
-        # set torch to not save gradients
-        torch.no_grad()
-        torch.set_grad_enabled(False)
-        self.net.eval()
         # create dataset + dataloader instance
         testds = os.path.dirname(
             os.path.dirname(image_files[0])
@@ -588,38 +584,42 @@ class Regressor:
         )
         # loop run network per batch and save values to dict_data_batch
         reg_values: Dict[str, Any] = dict((par, []) for par in self.params)
-        for bidx, (filename, param, x, y) in enumerate(test_loader):
-            param = [
-                self.params[0] if par == "" else par for par in param
-            ]  # if param is empty, set to first param in params list
+        # set torch to not save gradients
+        # torch.set_grad_enabled(False)  # this won't do it
+        self.net.eval()
+        with torch.no_grad():
+            for bidx, (filename, param, x, y) in enumerate(test_loader):
+                param = [
+                    self.params[0] if par == "" else par for par in param
+                ]  # if param is empty, set to first param in params list
 
-            # data to device
-            x = x.to(self.device)
-            if self.cuda:
-                x = x.cuda()
-            # run
-            prediction = self.net(x)
-            # pred = torch.nn.Sigmoid()(prediction)
-            # get results as regressor parameter values
-            if len(self.params) == 1:  # Single head prediction
-                par = self.params[0]
-                for i, param_prediction in enumerate(prediction):
-                    argmax = param_prediction.argmax()
-                    value = self.yclasses[par][argmax]
-                    reg_values[par].append(value)
-            else:
-                for pidx, par in enumerate(self.params):
+                # data to device
+                x = x.to(self.device)
+                if self.cuda:
+                    x = x.cuda()
+                # run
+                prediction = self.net(x)
+                # pred = torch.nn.Sigmoid()(prediction)
+                # get results as regressor parameter values
+                if len(self.params) == 1:  # Single head prediction
+                    par = self.params[0]
                     for i, param_prediction in enumerate(prediction):
-                        argmax = param_prediction[par].argmax()
+                        argmax = param_prediction.argmax()
                         value = self.yclasses[par][argmax]
                         reg_values[par].append(value)
-            dict_data_batch["crop_filenames"].append(filename)
-            dict_data_batch["predictions"].append(prediction)
-            dict_data_batch["values"].append(reg_values)
-            origin_filename = []
-            for file in filename:
-                origin_filename.append(test_dataset.dict_crop_files_origin[file])
-            dict_data_batch["filenames"].append(origin_filename)
+                else:
+                    for pidx, par in enumerate(self.params):
+                        for i, param_prediction in enumerate(prediction):
+                            argmax = param_prediction[par].argmax()
+                            value = self.yclasses[par][argmax]
+                            reg_values[par].append(value)
+                dict_data_batch["crop_filenames"].append(filename)
+                dict_data_batch["predictions"].append(prediction)
+                dict_data_batch["values"].append(reg_values)
+                origin_filename = []
+                for file in filename:
+                    origin_filename.append(test_dataset.dict_crop_files_origin[file])
+                dict_data_batch["filenames"].append(origin_filename)
 
         # unify filenames values (several crops, thus several results per image)
         output_values = []
