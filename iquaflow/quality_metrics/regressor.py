@@ -136,6 +136,26 @@ def parse_params_cfg(default_cfg_path: str = "config.cfg") -> Any:
             "--soft_threshold",
             default=0.3,
         )
+    if config.has_option("HYPERPARAMS", "patience_stopping"):
+        parser.add_argument(
+            "--patience_stopping",
+            default=json.loads(config["HYPERPARAMS"]["patience_stopping"]),
+        )
+    else:
+        parser.add_argument(
+            "--patience_stopping",
+            default=10,
+        )
+    if config.has_option("HYPERPARAMS", "patience_step"):
+        parser.add_argument(
+            "--patience_step",
+            default=json.loads(config["HYPERPARAMS"]["patience_step"]),
+        )
+    else:
+        parser.add_argument(
+            "--patience_step",
+            default=2e-5,
+        )
     if config.has_option("HYPERPARAMS", "network"):
         parser.add_argument(
             "--network",
@@ -341,6 +361,9 @@ class Regressor:
         )
         self.criterion = torch.nn.BCELoss()
         self.soft_threshold = args.soft_threshold
+        self.patience_stopping = args.patience_stopping
+        self.patience_step = args.patience_step
+        self.patience_counter = 0
 
         # Output Paths
         self.output_path = args.outputpath
@@ -417,6 +440,7 @@ class Regressor:
                 val_dict_results_epoch["fscores"] > best_fscore
             )
             if is_best:
+                self.patience_counter = 0
                 best_loss = val_dict_results_epoch["losses"]
                 best_fscore = val_dict_results_epoch["fscores"]
                 # remove previous checkpoint
@@ -471,7 +495,19 @@ class Regressor:
                             + os.path.basename(filename),
                         )
                         shutil.copyfile(filename, file_newpath)
-
+            else:  # is_best false
+                # EARLY STOPPING AND LR STEP
+                self.patience_counter += 1
+                if self.patience_counter >= self.patience_stopping:
+                    break
+                else:  # lower lr upon step and update optimizer
+                    self.lr -= self.patience_step
+                    self.optimizer = torch.optim.SGD(
+                        self.net.parameters(),
+                        lr=self.lr,
+                        momentum=self.momentum,
+                        weight_decay=self.weight_decay,
+                    )
             # append all results per epoch
             for metric in metric_list:
                 train_dict_results_whole[metric].append(
@@ -593,7 +629,7 @@ class Regressor:
                 param = [
                     self.params[0] if par == "" else par for par in param
                 ]  # if param is empty, set to first param in params list
-
+                print(f"deploying {param} in {filename}")
                 # data to device
                 x = x.to(self.device)
                 if self.cuda:
