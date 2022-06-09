@@ -109,7 +109,7 @@ class ScoreMetrics(QualityMetrics):
             stats.append(self.regressors[idx].deploy(image_files))
             """
             # init regressor instance
-            quality_metric = QualityMetrics()
+            quality_metric: Optional[Any] = None
             if metric == "sigma":
                 quality_metric = GaussianBlurMetrics(
                     self.config_filenames[idx], self.default_checkpoint_urls[idx]

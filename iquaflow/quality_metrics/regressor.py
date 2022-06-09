@@ -370,6 +370,7 @@ class Regressor:
             self.cuda = True
 
         if self.cuda:
+            torch.cuda.empty_cache()  # empty cuda cache
             print("=> using gpu id: '{}'".format(self.gpus))
             os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
             os.environ["CUDA_VISIBLE_DEVICES"] = self.gpus
