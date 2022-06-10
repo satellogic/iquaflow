@@ -275,7 +275,8 @@ class SNRHomogeneousBlocks(SNRBase):
         l_var = s[np.argwhere(m == self.img_median)]
         ll, low, up = sigmaclip(l_var[~np.isnan(l_var)], high=2)
         noise, sigma_noise = np.nanmedian(ll), np.nanstd(ll)
-
+        if noise <= 0:
+            return np.nan, np.nan
         return self.img_median / noise, self.img_median / (noise * noise) * sigma_noise
 
     def apply_one_channel(self, image: np.array) -> Tuple[float, float]:
