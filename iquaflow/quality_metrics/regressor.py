@@ -8,7 +8,7 @@ import pickle
 import shutil
 import time
 from bisect import bisect_right
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
 import numpy as np
 import torch
@@ -205,15 +205,17 @@ def get_non_parametizable_keys() -> List[str]:
 
 def get_modifiers_from_params(
     modifier_params: Dict[str, Any],
-    parametizable_params: Optional[List[str]] = get_parametizable_keys(),
-    non_parametizable_params: Optional[List[str]] = get_non_parametizable_keys(),
+    parametizable_params: List[str] = get_parametizable_keys(),
+    non_parametizable_params: List[str] = get_non_parametizable_keys(),
 ) -> Tuple[Any, Any]:
     ds_modifiers = []
     if len(modifier_params.items()) == 0:
         ds_modifiers.append(DSModifier())
     else:
         for key, elem in modifier_params.items():
-            if key not in parametizable_params and key not in non_parametizable_params:
+            if (key not in parametizable_params) and (
+                key not in non_parametizable_params
+            ):
                 print(
                     f"{key} not found in parametizable list, make sure your modifier is included in iquaflow.datasets imports and in parametizable_params"
                 )
@@ -298,13 +300,15 @@ def get_modifiers_from_params(
 def get_regression_interval_classes(
     modifier_params: Dict[str, Any],
     num_regs: List[int],
-    parametizable_params: Optional[List[str]] = get_parametizable_keys(),
-    non_parametizable_params: Optional[List[str]] = get_non_parametizable_keys(),
+    parametizable_params: List[str] = get_parametizable_keys(),
+    non_parametizable_params: List[str] = get_non_parametizable_keys(),
 ) -> Dict[str, Any]:
     yclasses = {}
     params = list(modifier_params.keys())
     for idx, param in enumerate(params):
-        if param not in parametizable_params and param not in non_parametizable_params:
+        if (param not in parametizable_params) and (
+            param not in non_parametizable_params
+        ):
             print(
                 f"{param} not found in parametizable list, make sure your modifier is included in iquaflow.datasets imports and in parametizable_params"
             )
