@@ -298,6 +298,20 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
                                 image_tensor = circ3d_pad(
                                     image_tensor.squeeze(), self.crop_size
                                 ).unsqueeze_(0)
+                            if (
+                                image_tensor.shape[2] < self.default_img_size[0]
+                                or image_tensor.shape[3] < self.default_img_size[1]
+                            ):
+                                (
+                                    self.crops_permut_y[cidx][idx],
+                                    self.crops_permut_x[cidx][idx],
+                                ) = replace_crop_permut(
+                                    self.crops_permut_y[cidx][idx],
+                                    self.crops_permut_x[cidx][idx],
+                                    1,
+                                    (image_tensor.shape[2], image_tensor.shape[3]),
+                                    self.crop_size,
+                                )
                             # all modifier cases
                             preproc_image = transforms.functional.crop(
                                 image_tensor,
@@ -521,6 +535,20 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
                             image_tensor = circ3d_pad(
                                 image_tensor.squeeze(), self.crop_size
                             ).unsqueeze_(0)
+                            if (
+                                image_tensor.shape[2] < self.default_img_size[0]
+                                or image_tensor.shape[3] < self.default_img_size[1]
+                            ):
+                                (
+                                    self.crops_permut_y[cidx][idx],
+                                    self.crops_permut_x[cidx][idx],
+                                ) = replace_crop_permut(
+                                    self.crops_permut_y[cidx][idx],
+                                    self.crops_permut_x[cidx][idx],
+                                    1,
+                                    (image_tensor.shape[2], image_tensor.shape[3]),
+                                    self.crop_size,
+                                )
                         # preproc_image = self.tCROP(image_tensor)
                         preproc_image = transforms.functional.crop(
                             image_tensor,
