@@ -8,7 +8,7 @@ import pickle
 import shutil
 import time
 from bisect import bisect_right
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import torch
@@ -195,18 +195,31 @@ def parse_params_cfg(default_cfg_path: str = "config.cfg") -> Any:
     return parser
 
 
+def get_parametizable_keys() -> List[str]:
+    return ["sigma", "scale", "sharpness", "snr", "rer"]
+
+
+def get_non_parametizable_keys() -> List[str]:
+    return ["dataset", "interpolation", "resol"]
+
+
 def get_modifiers_from_params(
     modifier_params: Dict[str, Any],
-    parametizable_params: List[str] = ["sigma", "scale", "sharpness", "snr", "rer"],
+    parametizable_params: Optional[List[str]] = get_parametizable_keys(),
+    non_parametizable_params: Optional[List[str]] = get_non_parametizable_keys(),
 ) -> Tuple[Any, Any]:
     ds_modifiers = []
     if len(modifier_params.items()) == 0:
         ds_modifiers.append(DSModifier())
     else:
         for key, elem in modifier_params.items():
-            if key not in parametizable_params:
+            if key not in parametizable_params and key not in non_parametizable_params:
+                print(
+                    f"{key} not found in parametizable list, make sure your modifier is included in iquaflow.datasets imports and in parametizable_params"
+                )
+            elif key in non_parametizable_params:
+                print(f"{key} not used as parameter")
                 continue
-
             for gidx in range(len(elem)):
                 if key == "sigma":
                     ds_modifiers.append(
@@ -271,8 +284,13 @@ def get_modifiers_from_params(
                         )
                     if modifier.init_SNR > modifier_params[key][gidx]:  # type: ignore
                         ds_modifiers.append(modifier)
-                    # else:
-                    #    ds_modifiers.append(DSModifier())
+                else:
+                    ds_modifier_name = "DSModifier_" + key
+                    if ds_modifier_name is globals():
+                        ds_modifier = globals()[key](
+                            params={key: modifier_params[key][gidx]}
+                        )
+                        ds_modifiers.append(ds_modifier)
 
     return ds_modifiers, modifier_params
 
@@ -280,12 +298,18 @@ def get_modifiers_from_params(
 def get_regression_interval_classes(
     modifier_params: Dict[str, Any],
     num_regs: List[int],
-    parametizable_params: List[str] = ["sigma", "scale", "sharpness", "snr", "rer"],
+    parametizable_params: Optional[List[str]] = get_parametizable_keys(),
+    non_parametizable_params: Optional[List[str]] = get_non_parametizable_keys(),
 ) -> Dict[str, Any]:
     yclasses = {}
     params = list(modifier_params.keys())
     for idx, param in enumerate(params):
-        if param not in parametizable_params:
+        if param not in parametizable_params and param not in non_parametizable_params:
+            print(
+                f"{param} not found in parametizable list, make sure your modifier is included in iquaflow.datasets imports and in parametizable_params"
+            )
+        elif param in non_parametizable_params:
+            print(f"{param} not used as parameter")
             continue
         param_items = modifier_params[param]
         if type(param_items) == np.ndarray:
@@ -321,26 +345,19 @@ class Regressor:
         self.num_crops = args.num_crops  # used only by Dataset
 
         # Implemented params
-        self.parametizable_params: List[str] = [
-            "sigma",
-            "scale",
-            "sharpness",
-            "snr",
-            "rer",
-        ]
         # Define modifiers and regression intervals
         self.ds_modifiers, self.modifier_params = get_modifiers_from_params(
-            self.modifier_params, self.parametizable_params
+            self.modifier_params
         )  # train case
         # self.ds_modifiers = [DSModifier()] # deploy case
         self.params = [
             key
             for key, value in self.modifier_params.items()
-            if (type(value) == np.ndarray) & (key in self.parametizable_params)
+            if (type(value) == np.ndarray) & (key in get_parametizable_keys())
         ]  # list(self.modifier_params.keys())
         self.dict_params = {par: idx for idx, par in enumerate(self.params)}
         self.yclasses = get_regression_interval_classes(
-            self.modifier_params, self.num_regs, self.parametizable_params
+            self.modifier_params, self.num_regs
         )
         self.crop_size = args.input_size
         self.tCROP = get_tensor_crop_transform(self.crop_size, "random")
