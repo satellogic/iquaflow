@@ -286,6 +286,8 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
                                 + str(self.mod_params[midx])
                             )
                             image = Image.open(filename)
+                            if image.mode != "RGB":
+                                image = image.convert("RGB")
                             image_tensor = transforms.functional.to_tensor(
                                 image
                             ).unsqueeze_(0)
@@ -507,6 +509,8 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
                             + filename_noext
                         )
                         image = Image.open(filename)
+                        if image.mode != "RGB":
+                            image = image.convert("RGB")
                         image_tensor = transforms.functional.to_tensor(
                             image
                         ).unsqueeze_(0)
