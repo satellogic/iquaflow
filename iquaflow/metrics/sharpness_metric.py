@@ -205,6 +205,8 @@ class SharpnessMeasure:
 
         # Find straight lines in the image
         lines = self.get_lines(image)
+        if lines is None:
+            raise Exception("Not a single line found on image. Try a different set of parameters, or check your image.")
 
         # Sort lines by angles
         vertical, horizontal, other = self.sort_angles(lines)
