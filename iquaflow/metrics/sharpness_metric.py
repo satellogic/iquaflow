@@ -3,6 +3,7 @@ from glob import glob
 from typing import Any, Dict, List, Optional, Tuple
 
 import cv2
+import geojson
 import matplotlib.pyplot as plt
 import numpy as np
 import rasterio
@@ -61,6 +62,8 @@ class SharpnessMeasure:
         get_rer: bool = True,
         get_fwhm: bool = True,
         get_mtf: bool = False,
+        save_edges: bool = False,
+        save_edges_to: str = "",
         debug: bool = False,
         calculate_mean: bool = False,
     ):
@@ -109,6 +112,11 @@ class SharpnessMeasure:
         self.get_rer = get_rer
         self.get_fwhm = get_fwhm
         self.get_mtf = get_mtf
+        self.save_edges = save_edges
+        if self.save_edges:
+            self.save_edges_to = save_edges_to
+            assert self.save_edges_to.endswith(".geojson")
+            self.features = []
         self.debug = debug
         self.calculate_mean = calculate_mean
         self.patch_list: List[float] = []
@@ -136,14 +144,14 @@ class SharpnessMeasure:
                     beta = self.contrast_params["channel 0"]["beta"]
                     gamma = self.contrast_params["channel 0"]["gamma"]
                 results[f"channel {i}"] = self.apply_to_one_channel(
-                    image[:, :, i], (alpha, beta, gamma)
+                    image[:, :, i], (alpha, beta, gamma), i
                 )
         else:
             alpha = self.contrast_params["channel 0"]["alpha"]
             beta = self.contrast_params["channel 0"]["beta"]
             gamma = self.contrast_params["channel 0"]["gamma"]
             results["channel 0"] = self.apply_to_one_channel(
-                image, (alpha, beta, gamma)
+                image, (alpha, beta, gamma), 0
             )
 
         # Calculate mean values of the metrics across channels
@@ -173,10 +181,18 @@ class SharpnessMeasure:
                             np.nanstd(v1),
                         ),
                     )
+
+        if self.save_edges:
+            feature_collection = geojson.FeatureCollection(self.features)
+            with open(self.save_edges_to, "w") as file:
+                geojson.dump(feature_collection, file)
         return results
 
     def apply_to_one_channel(
-        self, image: np.array, patch_params: Tuple[float, float, float]
+        self,
+        image: np.array,
+        patch_params: Tuple[float, float, float],
+        channel_num: int,
     ) -> Any:
         """
         Runs the measurement one image channel at the the time.
@@ -206,7 +222,9 @@ class SharpnessMeasure:
         # Find straight lines in the image
         lines = self.get_lines(image)
         if lines is None:
-            raise Exception("Not a single line found on image. Try a different set of parameters, or check your image.")
+            raise Exception(
+                "Not a single line found on image. Try a different set of parameters, or check your image."
+            )
 
         # Sort lines by angles
         vertical, horizontal, other = self.sort_angles(lines)
@@ -231,7 +249,7 @@ class SharpnessMeasure:
 
             self.edge_snrs.append([])
             # Create edge_list
-            edge_list = self.get_edge_list(patches)
+            edge_list, line_list = self.get_edge_list(patches, good_lines[i])
             # Calculate RER
             if self.get_rer:
                 rer = self.calculate_rer(edge_list)
@@ -275,6 +293,19 @@ class SharpnessMeasure:
                         "median": np.median(mtf[1]),
                         "IQR": np.subtract(*np.percentile(mtf[1], [75, 25])),
                     }
+
+            if self.save_edges:
+                for i, line in enumerate(line_list):
+                    ls = geojson.LineString([(line[2], line[0]), (line[3], line[1])])
+                    props = {"direction": k, "channel": f"channel {channel_num}"}
+                    if self.get_rer:
+                        props["RER"] = rer[i]
+                    if self.get_fwhm:
+                        props["FWHM"] = fwhm[i]
+                    if self.get_mtf:
+                        props["MTF_NYQ"] = mtf[0][i]
+                        props["MTF_halfNYQ"] = mtf[1][i]
+                    self.features.append(geojson.Feature(geometry=ls, properties=props))
 
         # if self.debug:
         #     self._plot_good_patches(image, vertical_patches, horizontal_patches, other_patches, lines, good_lines)
@@ -449,6 +480,7 @@ class SharpnessMeasure:
         np.random.shuffle(other)
 
         for lines, kind in zip([vertical, horizontal, other], ["v", "h", "o"]):
+            good_lines.append([])
             masked_image = image.copy()
             for i, l in enumerate(lines):
                 # adapt to array indexing
@@ -550,7 +582,7 @@ class SharpnessMeasure:
                     else:
                         other_patches.append(patch)
 
-                    good_lines.append(l)
+                    good_lines[-1].append(l)
         return (vertical_patches, horizontal_patches, other_patches, good_lines)
 
     def _plot_good_patches(
@@ -570,7 +602,7 @@ class SharpnessMeasure:
         fig.savefig(os.path.join(DEBUG_DIR, fn))
         plt.clf()
 
-    def get_edge_list(self, patch_list: List[Any]) -> List[Any]:
+    def get_edge_list(self, patch_list: List[Any], line_list: List[Any]) -> List[Any]:
         """
         Create a list of the good edges using the provided patch list
         :param patch_list:
@@ -578,15 +610,17 @@ class SharpnessMeasure:
         :return:
         """
         edge_list = []
+        final_line_list = []
 
-        for patch in patch_list:
-            _esf = self._get_edge(patch)
+        for (patch, line) in zip(patch_list, line_list):
+            _esf = self._get_edge(patch, line)
             if _esf is not None:
-                edge_list.append(_esf)
+                edge_list.append(_esf[0])
+                final_line_list.append(line)
 
-        return edge_list
+        return edge_list, final_line_list
 
-    def _get_edge(self, patch: np.array) -> np.array:
+    def _get_edge(self, patch: np.array, line: np.array) -> np.array:
         """
         Return the ESF extracted from the provided patch, if possible.
         :param patch:
@@ -598,7 +632,7 @@ class SharpnessMeasure:
         _esf = self.compute_esf(patch, edge_coeffs)
         if _esf is not None:
             self.patch_list.append(patch)
-            return _esf
+            return _esf, line
 
     def fit_subpixel_edge(self, patch: np.array) -> Any:
         """
