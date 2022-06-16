@@ -3,13 +3,14 @@ from glob import glob
 from typing import Any, Dict, List, Optional, Tuple
 
 import cv2
+import geojson
 import matplotlib.pyplot as plt
 import numpy as np
 import rasterio
 from joblib import Parallel, delayed
 from scipy import ndimage
 from scipy.fft import fft, fftfreq
-from scipy.interpolate import CubicSpline, UnivariateSpline, interp1d
+from scipy.interpolate import CubicSpline, UnivariateSpline
 from scipy.optimize import curve_fit
 from shapely.geometry import LineString, MultiPoint
 from shapely.ops import snap
@@ -61,6 +62,9 @@ class SharpnessMeasure:
         get_rer: bool = True,
         get_fwhm: bool = True,
         get_mtf: bool = False,
+        get_mtf_curve: bool = False,
+        save_edges: bool = False,
+        save_edges_to: str = "",
         debug: bool = False,
         calculate_mean: bool = False,
     ):
@@ -109,6 +113,15 @@ class SharpnessMeasure:
         self.get_rer = get_rer
         self.get_fwhm = get_fwhm
         self.get_mtf = get_mtf
+        self.get_mtf_curve = get_mtf_curve
+        if self.get_mtf_curve:
+            self.raw_lsf_list = []
+            self.mtf_curves = {}
+        self.save_edges = save_edges
+        if self.save_edges:
+            self.save_edges_to = save_edges_to
+            assert self.save_edges_to.endswith(".geojson")
+            self.features = []
         self.debug = debug
         self.calculate_mean = calculate_mean
         self.patch_list: List[float] = []
@@ -136,14 +149,14 @@ class SharpnessMeasure:
                     beta = self.contrast_params["channel 0"]["beta"]
                     gamma = self.contrast_params["channel 0"]["gamma"]
                 results[f"channel {i}"] = self.apply_to_one_channel(
-                    image[:, :, i], (alpha, beta, gamma)
+                    image[:, :, i], (alpha, beta, gamma), i
                 )
         else:
             alpha = self.contrast_params["channel 0"]["alpha"]
             beta = self.contrast_params["channel 0"]["beta"]
             gamma = self.contrast_params["channel 0"]["gamma"]
             results["channel 0"] = self.apply_to_one_channel(
-                image, (alpha, beta, gamma)
+                image, (alpha, beta, gamma), 0
             )
 
         # Calculate mean values of the metrics across channels
@@ -173,10 +186,18 @@ class SharpnessMeasure:
                             np.nanstd(v1),
                         ),
                     )
+
+        if self.save_edges:
+            feature_collection = geojson.FeatureCollection(self.features)
+            with open(self.save_edges_to, "w") as file:
+                geojson.dump(feature_collection, file)
         return results
 
     def apply_to_one_channel(
-        self, image: np.array, patch_params: Tuple[float, float, float]
+        self,
+        image: np.array,
+        patch_params: Tuple[float, float, float],
+        channel_num: int,
     ) -> Any:
         """
         Runs the measurement one image channel at the the time.
@@ -203,33 +224,24 @@ class SharpnessMeasure:
             output["MTF_NYQ"] = {}
             output["MTF_halfNYQ"] = {}
 
-        # Find straight lines in the image
-        lines = self.get_lines(image)
+        edge_dict, line_dict = self.compose_edge_list(image, patch_params)
 
-        # Sort lines by angles
-        vertical, horizontal, other = self.sort_angles(lines)
-
-        # Find patches that are in agreement with the contrast parameters
-        (
-            vertical_patches,
-            horizontal_patches,
-            other_patches,
-            good_lines,
-        ) = self.find_good_patches(image, vertical, horizontal, other, patch_params)
-        # Rotate horizontal patches
-        horizontal_patches = [np.rot90(p) for p in horizontal_patches]
-
-        for i, (patches, kind, k) in enumerate(
+        for i, (kind, k) in enumerate(
             zip(
-                [vertical_patches, horizontal_patches, other_patches],
                 ["vertical", "horizontal", "other"],
                 ["X", "Y", "other"],
             )
         ):
 
-            self.edge_snrs.append([])
-            # Create edge_list
-            edge_list = self.get_edge_list(patches)
+            # self.edge_snrs.append([])
+            # # Create edge_list
+            # edge_list, line_list = self.get_edge_list(patches, good_lines[i])
+            edge_list = edge_dict[kind]
+            line_list = line_dict[kind]
+
+            if self.get_mtf_curve:
+                self.mtf_curves[k] = self.calculate_mtf_curve()
+
             # Calculate RER
             if self.get_rer:
                 rer = self.calculate_rer(edge_list)
@@ -274,9 +286,61 @@ class SharpnessMeasure:
                         "IQR": np.subtract(*np.percentile(mtf[1], [75, 25])),
                     }
 
+            if self.save_edges:
+                for i, line in enumerate(line_list):
+                    ls = geojson.LineString([(line[2], line[0]), (line[3], line[1])])
+                    props = {"direction": k, "channel": f"channel {channel_num}"}
+                    if self.get_rer:
+                        props["RER"] = rer[i]
+                    if self.get_fwhm:
+                        props["FWHM"] = fwhm[i]
+                    if self.get_mtf:
+                        props["MTF_NYQ"] = mtf[0][i]
+                        props["MTF_halfNYQ"] = mtf[1][i]
+                    self.features.append(geojson.Feature(geometry=ls, properties=props))
+
+        if self.get_mtf_curve:
+            return self.mtf_curves
         # if self.debug:
         #     self._plot_good_patches(image, vertical_patches, horizontal_patches, other_patches, lines, good_lines)
         return output
+
+    def compose_edge_list(self, image, patch_params):
+        edge_dict = {}
+        line_dict = {}
+        # Find straight lines in the image
+        lines = self.get_lines(image)
+        if lines is None:
+            raise Exception(
+                "Not a single line found on image. Try a different set of parameters, or check your image."
+            )
+
+        # Sort lines by angles
+        vertical, horizontal, other = self.sort_angles(lines)
+
+        # Find patches that are in agreement with the contrast parameters
+        (
+            vertical_patches,
+            horizontal_patches,
+            other_patches,
+            good_lines,
+        ) = self.find_good_patches(image, vertical, horizontal, other, patch_params)
+        # Rotate horizontal patches
+        horizontal_patches = [np.rot90(p) for p in horizontal_patches]
+
+        for i, (patches, kind, k) in enumerate(
+            zip(
+                [vertical_patches, horizontal_patches, other_patches],
+                ["vertical", "horizontal", "other"],
+                ["X", "Y", "other"],
+            )
+        ):
+            self.edge_snrs.append([])
+            # Create edge_list
+            edge_list, line_list = self.get_edge_list(patches, good_lines[i])
+            edge_dict[kind] = edge_list
+            line_dict[kind] = line_list
+        return edge_dict, line_dict
 
     def get_lines(self, image: np.array) -> np.array:
         """
@@ -447,6 +511,7 @@ class SharpnessMeasure:
         np.random.shuffle(other)
 
         for lines, kind in zip([vertical, horizontal, other], ["v", "h", "o"]):
+            good_lines.append([])
             masked_image = image.copy()
             for i, l in enumerate(lines):
                 # adapt to array indexing
@@ -548,7 +613,7 @@ class SharpnessMeasure:
                     else:
                         other_patches.append(patch)
 
-                    good_lines.append(l)
+                    good_lines[-1].append(l)
         return (vertical_patches, horizontal_patches, other_patches, good_lines)
 
     def _plot_good_patches(
@@ -568,7 +633,7 @@ class SharpnessMeasure:
         fig.savefig(os.path.join(DEBUG_DIR, fn))
         plt.clf()
 
-    def get_edge_list(self, patch_list: List[Any]) -> List[Any]:
+    def get_edge_list(self, patch_list: List[Any], line_list: List[Any]) -> List[Any]:
         """
         Create a list of the good edges using the provided patch list
         :param patch_list:
@@ -576,15 +641,17 @@ class SharpnessMeasure:
         :return:
         """
         edge_list = []
+        final_line_list = []
 
-        for patch in patch_list:
-            _esf = self._get_edge(patch)
+        for (patch, line) in zip(patch_list, line_list):
+            _esf = self._get_edge(patch, line)
             if _esf is not None:
-                edge_list.append(_esf)
+                edge_list.append(_esf[0])
+                final_line_list.append(line)
 
-        return edge_list
+        return edge_list, final_line_list
 
-    def _get_edge(self, patch: np.array) -> np.array:
+    def _get_edge(self, patch: np.array, line: np.array) -> np.array:
         """
         Return the ESF extracted from the provided patch, if possible.
         :param patch:
@@ -596,7 +663,7 @@ class SharpnessMeasure:
         _esf = self.compute_esf(patch, edge_coeffs)
         if _esf is not None:
             self.patch_list.append(patch)
-            return _esf
+            return _esf, line
 
     def fit_subpixel_edge(self, patch: np.array) -> Any:
         """
@@ -711,6 +778,7 @@ class SharpnessMeasure:
         else:
             x_ = x[1:].copy()
             lsf_ = lsf.copy()
+
         # Fit a Gaussian to the LSF
         lsf_popt = self._fit_function(gaussian, x_, lsf_, p0=[50, 0, 1])
 
@@ -740,8 +808,15 @@ class SharpnessMeasure:
         if self.evaluate_esf(lsf_popt, esf_norm_popt, esf_norm, x_esf):
             # Return the all the values that were calculated for the edge
             # return [x_esf,x_lsf, esf, esf_popt, lsf, lsf_popt, esf_norm, esf_norm_popt]
+
             final_esf = model_esf(x_esf, *esf_popt)
             final_lsf = np.abs(np.diff(final_esf))
+            if self.get_mtf_curve:
+                # self.raw_lsf_list.append([x_, lsf_])
+                m_x = np.arange(-self.pixels_sampled, self.pixels_sampled + 0.1, 0.1)
+                m_esf = model_esf(m_x, *esf_popt)
+                m_lsf = np.abs(np.diff(m_esf))
+                self.raw_lsf_list.append([m_x[:-1], m_lsf])
             return [x_esf, final_esf, final_lsf, esf_norm_popt]
         else:
             return None
@@ -908,7 +983,7 @@ class SharpnessMeasure:
                 mtf = 2.0 / N * np.abs(yf[0 : N // 2])
                 mtf = mtf / mtf[0]
                 idx = np.argwhere(xf < 1.5).flatten()
-                p = interp1d(xf[idx], mtf[idx], kind="cubic")
+                p = CubicSpline(xf[idx], mtf[idx])
                 mtf_nyq.append(p(0.5))
                 mtf_half_nyq.append(p(0.25))
 
@@ -917,6 +992,32 @@ class SharpnessMeasure:
         if len(mtf_nyq) < 1:
             return None
         return np.array(mtf_nyq), np.array(mtf_half_nyq)
+
+    def calculate_mtf_curve(self) -> Any:
+        """
+        Calculates the average MTF curve of the image.
+        It uses a saved list of LSFs. Calculates the MTF curve for each LSF separately, then the mean and the
+        standard deviation of the curves.
+        :return:
+        """
+        x_min = np.max([x[0] for x in np.array(self.raw_lsf_list)[:, 0]])
+        x_max = np.min([x[-1] for x in np.array(self.raw_lsf_list)[:, 0]])
+        lsfs = []
+        mtfs = []
+        for x, l in self.raw_lsf_list:
+            idx = np.argwhere((x >= x_min) & (x <= x_max)).flatten()
+            lsf = l[idx]
+            lsfs.append(lsf)
+            N = lsf.shape[0]
+            T = 0.1
+            yf = fft(lsf)
+            xf = fftfreq(N, T)[: N // 2]
+            mtf = 2.0 / N * np.abs(yf[0 : N // 2])
+            mtf = mtf / mtf[0]
+            mtfs.append(mtf)
+        mean_mtf = np.mean(np.array(mtfs), axis=0)
+        std_mtf = np.std(np.array(mtfs), axis=0)
+        return {"cycles_per_pixel": xf, "mtf_mean": mean_mtf, "mtf_std": std_mtf}
 
 
 def sharpness_function_from_array(
@@ -936,12 +1037,9 @@ def sharpness_function_from_array(
     if len(img.shape) < 3:
         img = np.expand_dims(img, -1)
     metrics = [s.upper() for s in metrics]
-    if "RER" in metrics:
-        kwargs["get_rer"] = True
-    if "FWHM" in metrics:
-        kwargs["get_fwhm"] = True
-    if "MTF" in metrics:
-        kwargs["get_mtf"] = True
+    kwargs["get_rer"] = "RER" in metrics
+    kwargs["get_fwhm"] = "FWHM" in metrics
+    kwargs["get_mtf"] = "MTF" in metrics
     sharpness = SharpnessMeasure(**kwargs)
     result = sharpness.apply(img)
     return result
@@ -975,6 +1073,28 @@ def sharpness_function_from_fn(
     kwargs["get_rer"] = "RER" in metrics
     kwargs["get_fwhm"] = "FWHM" in metrics
     kwargs["get_mtf"] = "MTF" in metrics
+    sharpness = SharpnessMeasure(**kwargs)
+    result = sharpness.apply(img)
+    return result
+
+
+def mtf_from_array(img: np.array, **kwargs: Any) -> Any:
+    """
+    Generic function to construct an average MTF curve of the image.
+    Args:
+        image: a numpy array containing your image
+        kwargs: the SharpnessMeasure class has many tuneable parameters. If you wish to set any of them differently from
+        the default, pass them here as keyword arguments.
+    """
+
+    if img.shape[0] < 5:
+        img = np.moveaxis(img, 0, -1)
+    if len(img.shape) < 3:
+        img = np.expand_dims(img, -1)
+    kwargs["get_rer"] = False
+    kwargs["get_fwhm"] = False
+    kwargs["get_mtf"] = False
+    kwargs["get_mtf_curve"] = True
     sharpness = SharpnessMeasure(**kwargs)
     result = sharpness.apply(img)
     return result
