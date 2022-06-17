@@ -119,6 +119,8 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
             x = force_rgb(image_tensor)
             y = torch.tensor(0)
             param = ""
+        print(filename)
+        print(x.shape)
         return filename, param, Variable(x), Variable(y)
 
     def __modify__(self, ds_modifiers: Any, overwrite: Any = False) -> Any:
@@ -528,6 +530,9 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
                         image_tensor = transforms.functional.to_tensor(
                             image
                         ).unsqueeze_(0)
+                        print(filename)
+                        print("tensor before crop")
+                        print(image_tensor.shape)
                         if (
                             image_tensor.shape[2] < self.crop_size[0]
                             or image_tensor.shape[3] < self.crop_size[1]
@@ -535,20 +540,23 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
                             image_tensor = circ3d_pad(
                                 image_tensor.squeeze(), self.crop_size
                             ).unsqueeze_(0)
-                            if (
-                                image_tensor.shape[2] < self.default_img_size[0]
-                                or image_tensor.shape[3] < self.default_img_size[1]
-                            ):
-                                (
-                                    self.crops_permut_y[cidx][idx],
-                                    self.crops_permut_x[cidx][idx],
-                                ) = replace_crop_permut(
-                                    self.crops_permut_y[cidx][idx],
-                                    self.crops_permut_x[cidx][idx],
-                                    1,
-                                    (image_tensor.shape[2], image_tensor.shape[3]),
-                                    self.crop_size,
-                                )
+                        if (
+                            image_tensor.shape[2] < self.default_img_size[0]
+                            or image_tensor.shape[3] < self.default_img_size[1]
+                        ):
+                            (
+                                self.crops_permut_y[cidx][idx],
+                                self.crops_permut_x[cidx][idx],
+                            ) = replace_crop_permut(
+                                self.crops_permut_y[cidx][idx],
+                                self.crops_permut_x[cidx][idx],
+                                1,
+                                (image_tensor.shape[2], image_tensor.shape[3]),
+                                self.crop_size,
+                            )
+                            print("changed crops permut")
+                            print(self.crops_permut_y[cidx][idx])
+                            print(self.crops_permut_x[cidx][idx])
                         # preproc_image = self.tCROP(image_tensor)
                         preproc_image = transforms.functional.crop(
                             image_tensor,
@@ -557,6 +565,8 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
                             self.crop_size[0],
                             self.crop_size[1],
                         )
+                        print("tensor after crop")
+                        print(preproc_image.shape)
                         save_image(preproc_image, filename_cropped)
                         self.mod_resol.append(image.size)
                     """
