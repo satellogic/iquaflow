@@ -94,46 +94,14 @@ image_edge[:, : np.int(image_size / 2)] = np.int(image_val / 2)
 desired_rer = random.uniform(0.3, 0.5)
 
 
-class TestRER:
+class TestSharpness:
     """Applies a known, random amount of blur, then checks that
     resulting RER value is close to expected value.
-
     Does not test robustness in accounting for image content.
     """
 
-    def rer_is_reasonable(self, rer_value: np.float) -> Any:
-        # return desired_rer - rer_buffer < rer_value < desired_rer + rer_buffer
-        return "float" in type(rer_value).__name__ or rer_value is None
+    def test_sharpness_blurred_image(self):
 
-<<<<<<< HEAD
-    def test_experiment_info_class(self):
-        rot_angle = random.randint(1, 10)
-        # trim array to remove edge effects
-        trim_len = np.int((np.sqrt(2) * image_size - image_size) / 2)
-        rotated_image = rotate(image_edge, angle=rot_angle)[
-            trim_len:-trim_len, trim_len:-trim_len
-        ]
-        mtf = MTF()
-        rer_funcs = RERfunctions(sr_edge_factor=4)
-
-        list_of_images = [rotated_image]
-        original_rer = rer_funcs.rer(mtf, list_of_images)
-
-        blur = BlurImage(kernel_size=kernel_size)
-        blurred_image = blur.apply_blur_to_image(
-            np.stack([rotated_image for _ in range(3)], axis=2),
-            image_RER=original_rer,
-            desired_RER=desired_rer,
-        )
-        # trim array to remove edge effects
-        trim_len = np.int(kernel_size / 2)
-        list_of_images = [blurred_image[trim_len:-trim_len, trim_len:-trim_len, 0]]
-        rer_value = rer_funcs.rer(mtf, list_of_images)
-
-        assert self.rer_is_reasonable(
-            rer_value
-        ), f"RER is not reasonable, expected {desired_rer} but got {rer_value}"
-=======
         expected_results_in_coco_ds = {
             "RER_X": 0.55,
             "RER_Y": 0.55,
@@ -235,7 +203,6 @@ class TestRER:
                     / expected_results_in_coco_ds_after_blur[key]
                     < 0.15
                 ), f"Unexpected result for  {key} ({myrun['metrics_dict'][key]})"
->>>>>>> tox passing
 
 
 class TestSNR:
