@@ -589,7 +589,7 @@ class Regressor:
             # self.net.load_state_dict(torch.load(self.checkpoint_path))
             self.net = self.net.to(self.device)
             if self.cuda:
-                self.net = self.net.cuda()
+                self.net = self.net.to(self.device)
             return True
         else:
             return False
@@ -654,7 +654,7 @@ class Regressor:
                 # data to device
                 x = x.to(self.device)
                 if self.cuda:
-                    x = x.cuda()
+                    x = x.to(self.device)
                 # run
                 prediction = self.net(x)
                 # pred = torch.nn.Sigmoid()(prediction)
@@ -706,7 +706,7 @@ class Regressor:
         # move image_tensor to cuda
         image_tensor = image_tensor.to(self.device)
         if self.cuda:
-            image_tensor = image_tensor.cuda()
+            image_tensor = image_tensor.to(self.device)
         return self.net(image_tensor)
 
     def train_val_epoch(
@@ -769,8 +769,8 @@ class Regressor:
             )
             yreg = Variable(yreg)
             if self.cuda:
-                yreg = yreg.cuda()
-                x = x.cuda()
+                yreg = yreg.to(self.device)
+                x = x.to(self.device)
             prediction = self.net(x)  # input x and predict based on x, [b,:,:,:]
 
             # calculate prediction metrics
@@ -778,7 +778,7 @@ class Regressor:
                 target = torch.eye(self.num_regs[0])[yreg]
                 pred = torch.nn.Sigmoid()(prediction)
                 if self.cuda:
-                    target = target.cuda()
+                    target = target.to(self.device)
                 # calc loss
                 loss = self.criterion(pred, target)  # yreg as alternative (classes)
 
@@ -853,7 +853,7 @@ class Regressor:
                         param_yreg
                     ]  # one-hot encoding
                     if self.cuda:
-                        param_target = param_target.cuda()
+                        param_target = param_target.to(self.device)
                     param_prediction = prediction[pidx][param_indices]
                     param_pred = torch.nn.Sigmoid()(param_prediction)
                     param_loss = self.criterion(
