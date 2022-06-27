@@ -119,8 +119,6 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
             x = force_rgb(image_tensor)
             y = torch.tensor(0)
             param = ""
-        print(filename)
-        print(x.shape)
         return filename, param, Variable(x), Variable(y)
 
     def __modify__(self, ds_modifiers: Any, overwrite: Any = False) -> Any:
