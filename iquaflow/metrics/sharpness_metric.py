@@ -115,13 +115,13 @@ class SharpnessMeasure:
         self.get_mtf = get_mtf
         self.get_mtf_curve = get_mtf_curve
         if self.get_mtf_curve:
-            self.raw_lsf_list = []
-            self.mtf_curves = {}
+            self.raw_lsf_list: List[Any] = []
+            self.mtf_curves: Dict[str, Any] = {}
         self.save_edges = save_edges
         if self.save_edges:
             self.save_edges_to = save_edges_to
             assert self.save_edges_to.endswith(".geojson")
-            self.features = []
+            self.features: List[Any] = []
         self.debug = debug
         self.calculate_mean = calculate_mean
         self.patch_list: List[float] = []
@@ -305,7 +305,9 @@ class SharpnessMeasure:
         #     self._plot_good_patches(image, vertical_patches, horizontal_patches, other_patches, lines, good_lines)
         return output
 
-    def compose_edge_list(self, image, patch_params):
+    def compose_edge_list(
+        self, image: np.array, patch_params: Tuple[float, float, float]
+    ) -> Tuple[Any, Any]:
         edge_dict = {}
         line_dict = {}
         # Find straight lines in the image
@@ -448,9 +450,7 @@ class SharpnessMeasure:
                         good_lines.append([x0, y0, x1, y1])
         return np.array(good_lines)
 
-    def sort_angles(
-        self, lines: np.array
-    ) -> Tuple[List[np.array], List[np.array], List[np.array]]:
+    def sort_angles(self, lines: np.array) -> Tuple[Any, ...]:
         """
         Calculates the angle of the each of the lines relative to vertical.
         Sorts the lines into two groups:
@@ -501,10 +501,10 @@ class SharpnessMeasure:
         """
 
         alpha, beta, gamma = params
-        vertical_patches = []
-        horizontal_patches = []
-        other_patches = []
-        good_lines = []
+        vertical_patches: List[Any] = []
+        horizontal_patches: List[Any] = []
+        other_patches: List[Any] = []
+        good_lines: List[Any] = []
 
         np.random.shuffle(vertical)
         np.random.shuffle(horizontal)
@@ -633,7 +633,9 @@ class SharpnessMeasure:
         fig.savefig(os.path.join(DEBUG_DIR, fn))
         plt.clf()
 
-    def get_edge_list(self, patch_list: List[Any], line_list: List[Any]) -> List[Any]:
+    def get_edge_list(
+        self, patch_list: List[Any], line_list: List[Any]
+    ) -> Tuple[Any, Any]:
         """
         Create a list of the good edges using the provided patch list
         :param patch_list:
