@@ -415,7 +415,7 @@ class SharpnessMeasure:
         )
 
         if len(lines) == 0:
-            return None
+            return np.array([])
         # Cuts the lines to segments with lengths of self.edge_length
         lines_ = self._sort_lines(lines)
         # Format: [x0, y0, x1, y1]
