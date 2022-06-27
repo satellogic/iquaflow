@@ -424,8 +424,8 @@ class Regressor:
                 )
             print("Random Seed: ", self.seed)
             torch.cuda.manual_seed(self.seed)
-            self.criterion = self.criterion.cuda()
-            self.net = self.net.cuda()
+            self.criterion = self.criterion.to(self.device)
+            self.net = self.net.to(self.device)
 
     def train_val(self, train_loader: Any, val_loader: Any) -> Any:
         best_loss = np.inf
