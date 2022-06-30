@@ -154,7 +154,7 @@ def parse_params_cfg(default_cfg_path: str = "config.cfg") -> Any:
     else:
         parser.add_argument(
             "--patience_step",
-            default=2e-5,
+            default=0.5,
         )
     if config.has_option("HYPERPARAMS", "network"):
         parser.add_argument(
@@ -522,7 +522,7 @@ class Regressor:
                 if self.patience_counter >= self.patience_stopping:
                     break
                 else:  # lower lr upon step and update optimizer
-                    self.lr -= self.patience_step
+                    self.lr *= self.patience_step
                     self.optimizer = torch.optim.SGD(
                         self.net.parameters(),
                         lr=self.lr,
