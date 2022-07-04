@@ -233,14 +233,13 @@ class SharpnessMeasure:
             )
         ):
 
-            # self.edge_snrs.append([])
-            # # Create edge_list
-            # edge_list, line_list = self.get_edge_list(patches, good_lines[i])
+            # Create edge_list
             edge_list = edge_dict[kind]
             line_list = line_dict[kind]
 
-            if self.get_mtf_curve:
-                self.mtf_curves[k] = self.calculate_mtf_curve()
+            # if self.get_mtf_curve:
+            #     self.mtf_curves[k] = self.calculate_mtf_curve()
+            #
 
             # Calculate RER
             if self.get_rer:
@@ -342,6 +341,10 @@ class SharpnessMeasure:
             edge_list, line_list = self.get_edge_list(patches, good_lines[i])
             edge_dict[kind] = edge_list
             line_dict[kind] = line_list
+            if self.get_mtf_curve:
+                self.mtf_curves[k] = self.calculate_mtf_curve()
+                self.raw_lsf_list = []
+
         return edge_dict, line_dict
 
     def get_lines(self, image: np.array) -> np.array:
