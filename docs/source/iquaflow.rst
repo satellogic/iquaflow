@@ -1,4 +1,4 @@
-iquaflow package
+iquaflow
 =====================
 
 Subpackages
@@ -13,7 +13,7 @@ Subpackages
 Submodules
 ----------
 
-iquaflow.ds\_stats module
+ds\_stats module
 ------------------------------
 
 .. automodule:: iquaflow.ds_stats
@@ -21,26 +21,10 @@ iquaflow.ds\_stats module
    :undoc-members:
    :show-inheritance:
 
-iquaflow.sanity module
+sanity module
 ---------------------------
 
 .. automodule:: iquaflow.sanity
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-iquaflow.version module
-----------------------------
-
-.. automodule:: iquaflow.version
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-Module contents
----------------
-
-.. automodule:: iquaflow
    :members:
    :undoc-members:
    :show-inheritance:
