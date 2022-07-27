@@ -20,11 +20,11 @@ class DSWrapper:
     Besides also provides a summary dictionary of the metadata of the dataset.
 
     Args:
-        data_path: str. Root path of the dataset
-        parent_folder:  str. Path of the folder containing the dataset
-        data_input: str. Path of the folder that contains the images
-        json_annotations: str. Path to the jsn COCO annotations
-        params: dict. Contains metainfomation of the dataset
+        data_path: Root path of the dataset
+        parent_folder:  Path of the folder containing the dataset
+        data_input: Path of the folder that contains the images
+        json_annotations: Path to the jsn COCO annotations
+        params: Contains metainfomation of the dataset
 
     Attributes:
         data_path: str. Root path of the dataset
@@ -143,7 +143,7 @@ class DSWrapper:
         Allows to extend the metaparemer dictionary
 
         Args:
-        update_dict: dict. Update metainformation
+            update_dict: Update metainformation
 
         Returns:
             A dict with dataset metainformation
@@ -153,8 +153,10 @@ class DSWrapper:
     def modify(self, ds_modifier: "DSModifier") -> "DSWrapper":
         """Modify Dataset
         Returns a new DSWrapper modified by a DSModifier
+
         Args:
-            ds_modifer: DSModifier. Object to modify the current DSWrapper
+            ds_modifer: Object to modify the current DSWrapper
+        
         Returns:
             A new DSWrapper modified by DSModifier
         """
@@ -177,14 +179,14 @@ class DSModifier:
     with metainformation of th emodificator.
 
     Args:
-        name: str. Name of the modifier
-        ds_modifer: DSModifier. Composed modifier child
-        params: dict. Contains metainfomation of the modifier
+        name: Name of the modifier
+        ds_modifer: Composed modifier child
+        params: Contains metainfomation of the modifier
 
     Attributes:
-        name: str. Name of the modifier
-        ds_modifer: DSModifier. Composed modifier child
-        params: dict. Contains metainfomation of the modifier
+        name: Name of the modifier
+        ds_modifer: Composed modifier child
+        params: Contains metainfomation of the modifier
     """
 
     def __init__(self, ds_modifier: Optional["DSModifier"] = None):
@@ -197,7 +199,8 @@ class DSModifier:
         """Complete name
         Provides the complete name of composed modifers
 
-        Returns: st. Complete name of the modifer
+        Returns:
+            Complete name of the modifer
         """
         if self.ds_modifier is None:
             return self.name
@@ -225,7 +228,7 @@ class DSModifier:
         Allows to extend the metaparemer dictionary
 
         Args:
-        update_dict: dict. Update metainformation
+            update_dict: Update metainformation
 
         Returns:
             A dict with dataset metainformation
@@ -245,13 +248,14 @@ class DSModifier:
         This original implementation only creats an exact copy of the original dataset.
 
         Args:
-            data_path: str. Path of the root folder of the dataset
-            data_input: str. Path of the folder containing images
+            data_path: Path of the root folder of the dataset
+            data_input: Path of the folder containing images
             ds_wrapper: DSWrapper.
+        
         Returns:
-            mod_data_input: str. Path of the folder containing modified images
-            mod_data_path: str. Path of the modified root folder of the dataset
-            parent_folder: str. Path of the parent folder
+            mod_data_input: Path of the folder containing modified images
+            mod_data_path: Path of the modified root folder of the dataset
+            parent_folder: Path of the parent folder
 
         """
         if ds_wrapper is None:
@@ -276,6 +280,7 @@ class DSModifier:
 
         Args:
             ds_wrapper: DSWrapper.
+        
         Returns:
             ds_wrapper: DSWrapper.
         """
@@ -296,9 +301,9 @@ class DSModifier:
             ds_wrapper: DSWrapper.
 
         Returns:
-            data_input_modified: str. Path of the folder containing modified images
-            mod_path: str. Path of the modified root folder of the dataset
-            parent_folder: str. Path of the parent folder
+            data_input_modified: Path of the folder containing modified images
+            mod_path: Path of the modified root folder of the dataset
+            parent_folder: Path of the parent folder
 
         """
         data_path = ds_wrapper.data_path
@@ -341,8 +346,8 @@ class DSModifier:
         dataset are copied to the new dataset
 
         Args
-            data_input: str. Path of the original folder containing images
-            mod_path: str. Path to the new dataset
+            data_input: Path of the original folder containing images
+            mod_path: Path to the new dataset
 
         Returns:
             Name of the new folder containign the images
@@ -367,12 +372,12 @@ class DSModifier_dir(DSModifier):
     Class derived from DSModifier that modifies a dataset iterating its folder. Base class for single-file modifiers.
 
     Args:
-        ds_modifer: DSModifier. Composed modifier child
+        ds_modifer: Composed modifier child
 
     Attributes:
-        name: str. Name of the modifier
-        ds_modifer: DSModifier. Composed modifier child
-        params: dict. Contains metainfomation of the modifier
+        name: Name of the modifier
+        ds_modifer: Composed modifier child
+        params: Contains metainfomation of the modifier
     """
 
     def __init__(self, ds_modifier: Optional[DSModifier] = None):
@@ -388,8 +393,8 @@ class DSModifier_dir(DSModifier):
         Iterates the data_input path loading images, processing with _mod_img(), and saving to mod_path
 
         Args
-            data_input: str. Path of the original folder containing images
-            mod_path: str. Path to the new dataset
+            data_input: Path of the original folder containing images
+            mod_path: Path to the new dataset
 
         Returns:
             Name of the new folder containign the images
@@ -416,9 +421,9 @@ class DSModifier_dir(DSModifier):
         This method should be overwitten for child classes. In this Base version just return the image unchanged.
 
         Args
-            img: Numpy array. Original image
+            img: Numpy array - Original image
 
         Returns:
-            img: Numpy array. Modified image
+            img: Numpy array - Modified image
         """
         return img  # just leave the img as is

@@ -117,6 +117,7 @@ class SNRHomogeneousArea(SNRBase):
     It bins the measurements into DNs according to the mean pixel value, and calculates the mean
     SNR for each bin. It returns the SNR of the bin that corresponds to the median pixel value of
     the image.
+
     Args:
         patch_size: the size of patches in pixels
         stride: optional, default equals to the patch_size
@@ -154,6 +155,7 @@ class SNRHomogeneousArea(SNRBase):
         and stride and checks the ratio of the pixels that have lbp values in the
         given range. If that ratio is higher than the lbp_threshold, the patch is
         good added to self.patches.
+
         Args:
             image: the main image where we search for patches
             window_size: the size of the patch:
@@ -233,6 +235,7 @@ class SNRHomogeneousBlocks(SNRBase):
     to the image median pixel value is selected, and the noise is defined as the median value of
     the std values in that bin (after applying sigmaclipping). The SNR is defined as the image
     median pixel value divided by the noise.
+
     Args:
         patch_size:
         stride: optional, default equals to patch_size
@@ -310,24 +313,29 @@ def snr_function_from_fn(
 ) -> Tuple[Any, Any]:
     """
     Generic function to apply either SNR algorithm for an image.
+    
     Args:
         image_path: the path to your image
         ext: the extension of the image
         method: the algorithm you want to use. Can be HA for SNRHomogeneousArea or HB for SNRHomogeneousBlocks
         params: the arguments that need to be passed to the algorithm. These can be the following:
-            HA algorithm:
-                patch_size: the size of patches, default is 15
-                stride: optional, default equals to the patch_size
-                radius: radius for LBP, default is 1
-                lbp_threshold: the threshold to select good patches, default is 0.55
-                each_channel: return the SNR for each channel. If False, only returns the mean value
-                debug: if True, returns intermediate values, and plots the image with the good patches. Use carefully
+
+            - HA algorithm:
+
+                -- patch_size: the size of patches, default is 15
+                -- stride: optional, default equals to the patch_size
+                -- radius: radius for LBP, default is 1
+                -- lbp_threshold: the threshold to select good patches, default is 0.55
+                -- each_channel: return the SNR for each channel. If False, only returns the mean value
+                -- debug: if True, returns intermediate values, and plots the image with the good patches. Use carefully
                     for large images
-            HB algorithm:
-                patch_size: the size of patches, default is 3
-                stride: optional, default equals to patch_size
-                each_channel: return the SNR for each channel. If False, only returns the mean value
-                debug: if True, returns intermediate values
+
+            - HB algorithm:
+
+                -- patch_size: the size of patches, default is 3
+                -- stride: optional, default equals to patch_size
+                -- each_channel: return the SNR for each channel. If False, only returns the mean value
+                -- debug: if True, returns intermediate values
     """
     if ext == "tif":
         with rasterio.open(image, "r") as data:

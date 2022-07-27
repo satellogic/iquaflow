@@ -787,12 +787,14 @@ class MTF:
     ) -> Any:
         """
         this function receives a list of slanted edges (vertically aligned) and produces the MTF
+        
         Args:
             edge_images_array: list of numpy arrays containing the edges
             USE_IMATEST_TRICK=True: bool    use the imatest denoising trick
             display=True     : display intermediate results
             super_resolved=6 : change the super-resolution factor (minimum 6 because of the
                                resampling needed to aling the LSFs)
+        
         Returns:
             return the mtf profile as two lists (interpX, interpY), in cycles per pixel
             use the functions display_mtf and  display_mtf_cycles_per_mm  to display the MTFs
