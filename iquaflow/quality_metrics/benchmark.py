@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 
 
 def get_eval_metrics() -> Tuple[Dict[str, str], List[str]]:
@@ -115,6 +116,25 @@ def get_topk(vals: Any, k: int = 3, reverse: bool = True) -> List[Any]:
         return list([i for i, v in top_k])  # min first, max last
 
 
+def get_values_last(vals: Any, epochs: int = 10) -> Tuple[Any, Any]:
+    # filter last 10 epochs values
+    vals_last = [
+        row[-epochs : len(row)] if hasattr(row, "__len__") else row for row in vals
+    ]
+    # get mean of last values
+    vals_last_mean = [np.mean(row) for row in vals_last]
+    return vals_last, vals_last_mean
+
+
+def get_values_top(vals: Any, tags: Any, k: int = 11) -> Tuple[Any, Any]:
+    top_k_idx = get_topk(vals, k)
+    vals_top = [vals[idx] for idx in top_k_idx]
+    vals_tags_top = [
+        tags[idx] if len(tags) >= len(top_k_idx) else tags for idx in top_k_idx
+    ]
+    return vals_top, vals_tags_top
+
+
 def formatvals(vals: Any, tostr: bool = True, round_decimals: int = 5) -> List[Any]:
     newvals = []
     for val in vals:
@@ -150,28 +170,13 @@ def plot_parameter(
         len(val_values),
     )
     # filter last 10 epochs values
-    train_values_last = [
-        row[-10 : len(row)] if hasattr(row, "__len__") else row for row in train_values
-    ]
-    val_values_last = [
-        row[-10 : len(row)] if hasattr(row, "__len__") else row for row in val_values
-    ]
-    # get mean of last values
-    train_values_last_mean = [np.mean(row) for row in train_values_last]
-    val_values_last_mean = [np.mean(row) for row in val_values_last]
+    train_values_last, train_values_last_mean = get_values_last(train_values, 10)
+    val_values_last, val_values_last_mean = get_values_last(val_values, 10)
     # filter top k (avoid large benchmark plot comparison)
+    train_values_top, train_tags_top = get_values_top(train_values_last, tags, 11)
+    val_values_top, val_tags_top = get_values_top(val_values_last, tags, 11)
+
     print(f"Plotting {parameter_name}")
-    train_top_k_idx = get_topk(train_values_last, 11)
-    train_values_top = [train_values_last[idx] for idx in train_top_k_idx]
-    train_tags_top = [
-        tags[idx] if len(tags) >= len(train_top_k_idx) else tags
-        for idx in train_top_k_idx
-    ]
-    val_top_k_idx = get_topk(val_values_last, 11)
-    val_values_top = [val_values_last[idx] for idx in val_top_k_idx]
-    val_tags_top = [
-        tags[idx] if len(tags) >= len(val_top_k_idx) else tags for idx in val_top_k_idx
-    ]
     # Boxplots per epoch
     plot_1d(
         train_values_top,
@@ -229,6 +234,23 @@ def plot_benchmark_whole_pkl(pkl_files: List[str], output_path_root: str) -> Non
     experiment_list = list(experiment_tags.keys())
     metric_tags, metric_list = get_eval_metrics()
 
+    df_train = pd.DataFrame(index=experiment_list, columns=metric_list)
+    df_val = pd.DataFrame(index=experiment_list, columns=metric_list)
+    for metric in metric_list:
+        train_values = [
+            experiment_tags[tag]["train"][metric] for tag in experiment_list
+        ]
+        val_values = [experiment_tags[tag]["val"][metric] for tag in experiment_list]
+        # get unique values
+        train_values_last, train_values_last_mean = get_values_last(train_values, 10)
+        val_values_last, val_values_last_mean = get_values_last(val_values, 10)
+        # to dataframe
+        df_train[metric] = train_values_last_mean
+        df_val[metric] = val_values_last_mean
+    df_train.to_csv(os.path.join(output_path_root, "df_train.csv"))
+    df_val.to_csv(os.path.join(output_path_root, "df_val.csv"))
+    print("Wrote df_train.csv and df_val.csv")
+    """
     for metric in metric_list:
         tags_idx = [
             idx
@@ -246,6 +268,8 @@ def plot_benchmark_whole_pkl(pkl_files: List[str], output_path_root: str) -> Non
             tags=selected_tags,
             output_path=output_path_root,
         )
+
+    """
 
 
 def write_pkl_from_csv(csv_file: str) -> str:
