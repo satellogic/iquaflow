@@ -71,6 +71,7 @@ class ExperimentInfo:
     def apply_metric_per_run(self, metric_: Metric, gt_path: str) -> Dict[str, Any]:
         """
         Applies a new metric to previously executed experiments.
+        
         Args:
             metric_: Metric. metric to be applied
             gt_path: str. ground truth to apply metric
@@ -88,6 +89,7 @@ class ExperimentInfo:
     def apply_metric_per_run_no_mlflow(self, metric_: Metric, gt_path: str) -> Any:
         """
         Applies a new metric to previously executed experiments.
+        
         Args:
             metric_: Metric. metric to be applied
             gt_path: str. ground truth to apply metric

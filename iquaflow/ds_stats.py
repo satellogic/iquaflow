@@ -20,6 +20,14 @@ class DsStats:
     """
     Perform stats to image datasets and annotations.
     It can either work as standalone class or with DSWrapper class.
+    
+    Args:
+        data_path: The full path to the dataset to be analized
+        output_path: the full path to the output (stats / plots)
+    
+    Attributes:
+        data_path: The full path to the dataset to be analized
+        output_path: the full path to the output (stats / plots)
     """
 
     def __init__(
@@ -59,8 +67,9 @@ class DsStats:
     def perform_stats(self, show_plots: Optional[bool] = True) -> List[Dict[str, Any]]:
         """
         Perform and plot stats on annotation jsons / geojsons and images
+
         Returns:
-            (dict) Dictionary with statistics
+            Dictionary with statistics
         """
         stats = []
 
@@ -320,10 +329,12 @@ class DsStats:
     def coco_imgs_stats(imgs_lst: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
         calc stats in coco json images list
+
         Args:
-            imgs_lst (List[Dict]): List of images (coco json "images" field).
+            imgs_lst: List of images (coco json "images" field).
+        
         Returns:
-            stats (List[Dict]): List of stats.
+            stats: List of stats.
         """
         hs, ws = [], []
 
@@ -338,6 +349,9 @@ class DsStats:
         """
         A dictionary with ratio coverage (in area) per class.
         Background class has id -999
+
+        Args:
+            coco_annots: A dictionary with coco-format annotations
         """
         d = {"imgid": {-999: 0}}
         gt = coco_annots
@@ -400,11 +414,13 @@ class DsStats:
     ) -> Dict[str, Any]:
         """
         compute class tags histogram for coco json
+
         Args:
-            ans (List[Dict]): List of annotations (coco json "annotations" field).
-            cats (List[Dict]): List of categories (coco json "categories" field).
+            ans: List of annotations (coco json "annotations" field).
+            cats: List of categories (coco json "categories" field).
+
         Returns:
-            stats (Dict[str, Any]]): Classes ids, names and tags count.
+            stats: Classes ids, names and tags count.
         """
         ans_cat = [an["category_id"] for an in ans]
         cats_k = list(set(ans_cat))
@@ -418,10 +434,12 @@ class DsStats:
     def coco_bbox_aspect_ratio_histo(ans: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
         compute bbox aspect ratio histogram for coco json
+
         Args:
-            ans (List[Dict]): List of annotations (coco json "annotations" field).
+            ans: List of annotations (coco json "annotations" field).
+        
         Returns:
-            stats (Dict[str, Any]]): Aspect ratios, bin edges and counts.
+            stats: Aspect ratios, bin edges and counts.
         """
         ar = [an["bbox"][2] / an["bbox"][3] for an in ans if an["bbox"][3] > 0]
         hist_, bin_edges_ = np.histogram(ar)
@@ -434,10 +452,12 @@ class DsStats:
     def coco_imgs_aspect_ratio_histo(ims: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
         compute bbox aspect ratio histogram for coco json
+
         Args:
-            ims (List[Dict]): List of images (coco json "images" field).
+            ims: List of images (coco json "images" field).
+
         Returns:
-            stats (Dict[str, Any]]): Aspect ratios, bin edges and counts.
+            stats: Aspect ratios, bin edges and counts.
         """
         ar = [im["width"] / im["height"] for im in ims]
         hist_, bin_edges_ = np.histogram(ar)
@@ -450,10 +470,12 @@ class DsStats:
     def coco_bbox_area_histo(ans: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
         compute bbox area histogram for coco json
+
         Args:
-            ans (List[Dict]): List of annotations (coco json "annotations" field).
+            ans : List of annotations (coco json "annotations" field).
+
         Returns:
-            stats (Dict[str, Any]]): Areas, bin edges and counts.
+            stats: Areas, bin edges and counts.
         """
         ar = [an["bbox"][2] * an["bbox"][3] for an in ans]
         hist_, bin_edges_ = np.histogram(ar)
@@ -465,10 +487,11 @@ class DsStats:
     def coco_imgs_area_histo(ims: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
         compute bbox area histogram for coco json
+
         Args:
-            ims (List[Dict]): List of images (coco json "images" field).
+            ims: List of images (coco json "images" field).
         Returns:
-            stats (Dict[str, Any]]): Areas, bin edges and counts.
+            stats: Areas, bin edges and counts.
         """
         ar = [im["width"] * im["height"] for im in ims]
         hist_, bin_edges_ = np.histogram(ar)
@@ -479,10 +502,11 @@ class DsStats:
     def geojson_imgs_stats(self, imgs_lst: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
         calc stats from images filename list
+
         Args:
-            imgs_lst (List[Dict]): List of image filenames (geojson "image_filename" field).
+            imgs_lst: List of image filenames (geojson "image_filename" field).
         Returns:
-            stats (List[Dict]): List of stats.
+            stats: List of stats.
         """
         hs, ws = [], []
 
@@ -504,11 +528,13 @@ class DsStats:
         """
         This function returns the result of operation func on the in_field attribute from the geodataframe gdf.
         When the input element row from the geodataframe is None or similar, the return is also None for this element.
+        
         Args:
-            gdf (GeoDataFrame): Input geodataframe to add info to.
-            func (function): Function that will add further info to the dataframe
-            in_field (str): Name of the Attribute or column used as an input of the operation
-            out_field_lst (list): Name list of the Attributes or columns that will be added afterwards.
+            gdf: Input geodataframe to add info to.
+            func: Function that will add further info to the dataframe
+            in_field: Name of the Attribute or column used as an input of the operation
+            out_field_lst: Name list of the Attributes or columns that will be added afterwards.
+
         Returns:
             The new geodataframe with added/modified information.
         """
@@ -524,10 +550,12 @@ class DsStats:
     def _calc_minrotrect(feat: Polygon) -> Polygon:
         """
         Returns the best fitting rotated bounding box
+
         Args:
-            feat (shapely.geometry): Input geometrical feature.
+            feat: Input geometrical feature.
+        
         Returns:
-            (shapely.geometry): Output geometrical rotated rectangle.
+            Output geometrical rotated rectangle.
         """
         if feat:
             return feat.minimum_rotated_rectangle
@@ -538,10 +566,12 @@ class DsStats:
     def _calc_bbox(feat: Polygon) -> Polygon:
         """
         Returns the best fitting bounding box
+
         Args:
-            feat (shapely.geometry): Input geometrical feature.
+            feat: Input geometrical feature.
+        
         Returns:
-            (shapely.geometry): Output bounding box rectangle.
+            Output bounding box rectangle.
         """
         if feat:
             return box(*feat.bounds)
@@ -552,10 +582,12 @@ class DsStats:
     def _area_pol(feat: Polygon) -> Union[float, None]:
         """
         Returns the area of the main geometry
+
         Args:
-            feat (shapely.geometry): Input geometrical feature.
+            feat: Input geometrical feature.
+        
         Returns:
-            (float): area
+            area
         """
         if feat:
             return float(feat.area)
@@ -566,10 +598,12 @@ class DsStats:
     def _compute_compactness(feat: Polygon) -> Union[float, None]:
         """
         Returns compactness of the polygon
+
         Args:
-            feat (shapely.geometry): Input geometrical feature.
+            feat: Input geometrical feature.
+        
         Returns:
-            (float): compactness
+            compactness
         """
         area = feat.area
         perimeter = feat.length
@@ -582,10 +616,12 @@ class DsStats:
     def _calc_rectangle_stats(feat: Polygon) -> Union[List[float], List[None]]:
         """
         It calculates basic statistics from a rectangle (expressed as Polygon)
+
         Args:
-            feat (shapely.geometry): Input geometrical feature.
+            feat: Input geometrical feature.
+        
         Returns:
-            (list): high, width, angle from the rotated box
+            high, width, angle from the rotated box
         """
 
         if feat:
@@ -629,10 +665,12 @@ class DsStats:
     def _calc_centroid(feat: Polygon) -> Union[List[float], List[None]]:
         """
         It returns the x and y position of the centroid from the input Polygon
+
         Args:
-            feat (shapely.geometry): Input geometrical feature.
+            feat: Input geometrical feature.
+        
         Returns:
-            (list): x,y centroid position
+            x,y centroid position
         """
         if feat:
             c = feat.centroid
@@ -646,11 +684,13 @@ class DsStats:
     ) -> Union[List[Dict[str, float]], List[Dict[str, None]]]:
         """
         It returns the min, mean, max from a dataframe field
+
         Args:
-            field (gpd.GeoDataFrame): Geodataframe to count stats from
-            field (str): Name of the attribute, column or field to calc stats from
+            field: Geodataframe to count stats from
+            field: Name of the attribute, column or field to calc stats from
+        
         Returns:
-            (Dict[float]): returns the min, mean, max from a dataframe field
+            returns the min, mean, max from a dataframe field
         """
         if field in df:
             return [
@@ -878,10 +918,11 @@ class DsStats:
     ) -> None:
         """
         A tool that can be used to visualize a summary of the images in a path
+
         Args:
-            data_path (str): Path pointing to the images folder
-            sample (int): number of samples to build the preview from
-            size (int): The size of each sample.
+            data_path: Path pointing to the images folder
+            sample: number of samples to build the preview from
+            size: The size of each sample.
         """
         # from easyimages import EasyImageList
         # setting default params:
@@ -903,11 +944,12 @@ class DsStats:
     ) -> None:
         """
         A tool that can be used to visualize a interactive summary of the annotations
+
         Args:
-            df (gpd.pd.DataFrame): dataframe
-            fields_to_include (list): which fields to consider (here one must about fields with complex structure such as 'geometry')
-            export_html_filename (str): If indicated, it will export to html the interactive chart to the inputted filename.
-            show_inline (bool): By default is True, which indicates that it will be displayed inline in the notebook from where it is called.
+            df: dataframe
+            fields_to_include: which fields to consider (here one must about fields with complex structure such as 'geometry')
+            export_html_filename: If indicated, it will export to html the interactive chart to the inputted filename.
+            show_inline: By default is True, which indicates that it will be displayed inline in the notebook from where it is called.
         """
         try:
             jsonstr = df[fields_to_include].to_json(orient="records")

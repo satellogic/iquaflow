@@ -8,10 +8,12 @@ from joblib import Parallel, delayed
 def treat_path_string_start(ds_path: str) -> str:
     """
     remove initial ./ from ds_path
+
     Args:
-        ds_path: str. Input dataset path
+        ds_path: Input dataset path
+
     Returns:
-        ds_path: str. A transformed ds_path
+        A transformed ds_path
     """
     for i in range(5):
         ds_path = (
@@ -30,6 +32,7 @@ def upload_objects(
 ) -> None:
     """
     Upload the contents of a folder directory
+
     Args:
         bucket_name: the name of the s3 bucket
         root_pth_bucket: the folder path in the s3 bucket
@@ -76,6 +79,7 @@ def download_s3_folder(
     """
     Download the contents of a folder directory
     function downloaded from stackoverflow
+
     Args:
         bucket_name: the name of the s3 bucket
         s3_folder: the folder path in the s3 bucket
@@ -101,12 +105,14 @@ def download_s3_filename(
 ) -> str:
     """
     Download file from bucket
+
     Args:
         bucket_name: the name of the s3 bucket
         s3_filename: the filename in the s3 bucket
         local_filename: The local filename in the local file system
+    
     Returns:
-        (str) The local filename in the local file system
+        The local filename in the local file system
     """
     s3 = boto3.resource("s3")
     bucket = s3.Bucket(bucket_name)

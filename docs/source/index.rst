@@ -5,7 +5,13 @@
 
 Welcome to iquaflow's documentation!
 =====================================
-iquaflow is an image quality framework that aims at providing a set of tools to assess image quality using classification/segmentation tasks as a means.
+**iquaflow** is an image quality framework that aims at providing a set of tools to assess image quality. 
+
+There are several aproaches to acomplish the objective. One can measure quality directly by applying metrics on the images that compose a dataset. These metrics can be  based on similarity (by comparing against a groundtruth) or they can also be "blind" ( such as measuring blur, noise, sharpness...). The user can add custom metrics that can be easily integrated in iquaflow. 
+
+Furthermore, iquaflow allows to measure quality by using the performance of AI models trained on the images as a proxy. This also helps to easily make studies of performance degradation on several modifications of the original dataset with images (such as compression modifications). All this is wrapped in mlflow: an interactive tool used to visualize and summarize the results. A study like that is named a "use case" and there is a `cookiecutter <https://github.com/satellogic/iquaflow-use-case-cookiecutter>`_ to falicitate the code generation for each new study.
+
+
  
 The `source code`_ and `issue tracker`_ are hosted on GitHub, and all contributions and feedback are more than welcome. 
 
@@ -18,6 +24,8 @@ Installation
 You can install iquaflow using pip::
 
   pip install -e . 
+
+Alternatively you can use docker. The Dockerfile and a whole template for a use case study repository is available as a cookiecutter in `here <https://github.com/satellogic/iquaflow-use-case-cookiecutter>`_. 
 
 iquaflow is a Python library, and therefore should work on Linux, OS X and Windows provided that you can install its dependencies. If you find any problem,
 `please open an issue`_ and we will take care of it.
@@ -35,13 +43,14 @@ iquaflow is a Python library, and therefore should work on Linux, OS X and Windo
 .. _`pyenv`: https://github.com/pyenv/pyenv
 .. _`conda`: https://conda.io/docs/
 
+
 .. toctree::
    :maxdepth: 2
    :caption: Contents:
-
+   
+   UserGuide.ipynb
+   Course.ipynb
    iquaflow
-   iquaflow.datasets 
-   iquaflow.experiments 
 
 
 Indices and tables

@@ -32,10 +32,11 @@ class ExperimentSetup:
         ref_dsw_val: DSWrapper. Optional. Reference validation DSWRapper that the experiment bases on
         extra_train_params: dict. Extra training paramters for the ML model
         cloud_options: dict. This are the options related with the cloud such as sagemaker. Values are:
-            bucket_name: str. If set, modified data (by IQF-modifiers) will be uploaded to the bucket.
-            tracking_uri: str. trackingURI for mlflow. default is local to the ./mlflow folder
-            registry_uri: str. registryURI for mlflow. default is local to the ./mlflow folder
-            upload_num_threads: int. Number of threads used for uploading data to bucket.
+
+            - bucket_name: str. If set, modified data (by IQF-modifiers) will be uploaded to the bucket.
+            - tracking_uri: str. trackingURI for mlflow. default is local to the ./mlflow folder
+            - registry_uri: str. registryURI for mlflow. default is local to the ./mlflow folder
+            - upload_num_threads: int. Number of threads used for uploading data to bucket.
 
     """
 
@@ -106,7 +107,7 @@ class ExperimentSetup:
         Useful for cases such as when launching the training in SageMaker.
 
         Args:
-        data_path_lst: List[str]. The list of datasets to upload.
+            data_path_lst: List[str]. The list of datasets to upload.
         """
         if self.bucket_name:
             for data_path in data_path_lst:
@@ -123,9 +124,10 @@ class ExperimentSetup:
         """Experiment execution
         It trains the ML model by using Task Execution for each of the DSModifers of the list
         This includes:
-        * Executing the modifiers
-        * Uploading data to bucket when needed
-        * Executing the TaskExecution
+
+            * Executing the modifiers
+            * Uploading data to bucket when needed
+            * Executing the TaskExecution
         """
         # Looped once for the executing the modifiers
         # Then give the chance to upload to a bucket

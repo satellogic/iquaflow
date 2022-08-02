@@ -72,25 +72,38 @@ class SharpnessMeasure:
         """
         The implementation needs several parameters, where the best value can be quite different depending on the source
         of the image.
-        :param window_size: If the image is large, the edge detector works better if we cut it to smaller windows. You
+        Args:
+window_size: If the image is large, the edge detector works better if we cut it to smaller windows. You
         need to define the window size here. If None is set, the whole image is passed to the edge detector at once.
-        :param stride: The stride of the sliding windows. By default it is the same as the window size.
-        :param edge_length: The length of the edges we want to evaluate.
-        :param edge_distance: The minimum distance between to edges.
-        :param contrast_params: A dictionary of dictionaries containing the alpha, beta, and gamma parameters to
+        Args:
+stride: The stride of the sliding windows. By default it is the same as the window size.
+        Args:
+edge_length: The length of the edges we want to evaluate.
+        Args:
+edge_distance: The minimum distance between to edges.
+        Args:
+contrast_params: A dictionary of dictionaries containing the alpha, beta, and gamma parameters to
         evaluate if an edge has sufficient contrast. The keys need to contain the channel number and the values are
         dictionaries containing the parameters.
-        :param pixels_sampled: The number of pixels to be sampled on either sides of the edges. Minimum is 5. Default
+        Args:
+pixels_sampled: The number of pixels to be sampled on either sides of the edges. Minimum is 5. Default
         intents to create patches with a square shape
-        :param r2_threshold: When fitting the constructed ESF with a theoretical curve, the R2 value of the fit has to
+        Args:
+r2_threshold: When fitting the constructed ESF with a theoretical curve, the R2 value of the fit has to
         be above this threshold to be evaluated.
-        :param snr_threshold: The minimum value of esge SNR for an edge to be evaluated
-        :param get_rer: If True, the RER value is calculated.
-        :param get_fwhm: If True, the FWHM value is calculated.
-        :param get_mtf: If True, the MTF is calculated, and its value at the Nyquist frequency and at the half Nyquist
+        Args:
+snr_threshold: The minimum value of esge SNR for an edge to be evaluated
+        Args:
+get_rer: If True, the RER value is calculated.
+        Args:
+get_fwhm: If True, the FWHM value is calculated.
+        Args:
+get_mtf: If True, the MTF is calculated, and its value at the Nyquist frequency and at the half Nyquist
         frequency is returned.
-        :param debug: If True, some debugging messages and plots are shown.
-        :param calculate_mean: If the image has multiple channels, all metrics are calculated independently for each
+        Args:
+debug: If True, some debugging messages and plots are shown.
+        Args:
+calculate_mean: If the image has multiple channels, all metrics are calculated independently for each
         channel. Setting this parameter as True, the mean values across channels is returned for each metric as well.
 
         """
@@ -131,8 +144,12 @@ class SharpnessMeasure:
     def apply(self, image: np.array) -> Any:
         """
         The main function to execute the measurement.
-        :param image:
-        :return:
+
+        Args:
+            image
+        
+        Return:
+            Also an image
         """
         results = {}
         # replace 0 values with np.nan values
@@ -202,14 +219,19 @@ class SharpnessMeasure:
         """
         Runs the measurement one image channel at the the time.
         The following steps are executed:
+
         1. Find straight lines in the image with the required length
         2. Sort the lines by their angle
         3. Cut patches around the lines, and check if they have sufficient contrast
         4. Calculate the ESFs
         5. Calculate the required metrics.
-        :param image:
-        :param patch_params:
-        :return:
+
+        Args:
+            image: In form of array
+            patch_params: tuple
+        
+        Returns:
+            //todo
         """
         assert len(image.shape) < 3
 
@@ -233,14 +255,13 @@ class SharpnessMeasure:
             )
         ):
 
-            # self.edge_snrs.append([])
-            # # Create edge_list
-            # edge_list, line_list = self.get_edge_list(patches, good_lines[i])
+            # Create edge_list
             edge_list = edge_dict[kind]
             line_list = line_dict[kind]
 
-            if self.get_mtf_curve:
-                self.mtf_curves[k] = self.calculate_mtf_curve()
+            # if self.get_mtf_curve:
+            #     self.mtf_curves[k] = self.calculate_mtf_curve()
+            #
 
             # Calculate RER
             if self.get_rer:
@@ -342,14 +363,22 @@ class SharpnessMeasure:
             edge_list, line_list = self.get_edge_list(patches, good_lines[i])
             edge_dict[kind] = edge_list
             line_dict[kind] = line_list
+            if self.get_mtf_curve:
+                self.mtf_curves[k] = self.calculate_mtf_curve()
+                self.raw_lsf_list = []
+
         return edge_dict, line_dict
 
     def get_lines(self, image: np.array) -> np.array:
         """
         Find suitable line in the image.
         Uses sliding windows to go through the images, and in each window calls the edge_detector function
-        :param image: numpy array, only one channel
-        :return: an array containing the detected lines
+        
+        Args:
+            image: array image, only one channel
+        
+        Returns:
+            an array containing the detected lines
         """
 
         lines = np.empty(shape=[0, 4])
@@ -390,11 +419,13 @@ class SharpnessMeasure:
         """
         Runs the canny edge detector to find edges, then uses the Hough transform to find straight lines with the
         given parameters.
+
         Args:
             image: the input image
             threshold:
             min_line_length: the minimum length of the line in pixels
             line_gap: the line gap
+
         Return:
             numpy array with the line coordinates
         """
@@ -425,8 +456,12 @@ class SharpnessMeasure:
         """
         Given the list of lines found by the edge detectors, it checks the lengths of the lines, and cuts them up to
         segments with a length of the self.edge_length.
-        :param lines:
-        :return:
+        
+        Args:
+            lines: list of lines
+        
+        Return:
+            //todo
         """
         good_lines = []
 
@@ -457,8 +492,10 @@ class SharpnessMeasure:
             vertical (within +-15 degrees from vertical),
             horizontal (within +-15 degrees from horizontal),
             other.
+        
         Args:
             lines: list of lines
+        
         Returns:
             tuple of 3 list of lines, each with [x0,x1,y0,y1,theta]
         """
@@ -492,12 +529,16 @@ class SharpnessMeasure:
         """
         Takes the line lists, for each line cuts a patch around the line. Then it checks if the patch complies with the
         contrast conditions defined by the parameters. If it complies, it adds the patch to the patch list.
-        :param image:
-        :param vertical: vertical line list
-        :param horizontal: horizontal line list
-        :param other: other line list
-        :param params: contrast condition parameters
-        :return: a Tuple with the patch lists in each directions, and a list of the good lines
+        
+        Args:
+            image: image numpy array
+            vertical: vertical line list
+            horizontal: horizontal line list
+            other: other line list
+            params: contrast condition parameters
+        
+        Returns:
+            a Tuple with the patch lists in each directions, and a list of the good lines
         """
 
         alpha, beta, gamma = params
@@ -638,9 +679,13 @@ class SharpnessMeasure:
     ) -> Tuple[Any, Any]:
         """
         Create a list of the good edges using the provided patch list
-        :param patch_list:
-        :param lines:
-        :return:
+
+        Args:
+            patch_list:
+            lines:
+
+        Returns:
+            //todo
         """
         edge_list = []
         final_line_list = []
@@ -656,8 +701,12 @@ class SharpnessMeasure:
     def _get_edge(self, patch: np.array, line: np.array) -> np.array:
         """
         Return the ESF extracted from the provided patch, if possible.
-        :param patch:
-        :return:
+
+        Args:
+            patch:
+        
+        Returns:
+            //todo
         """
         # Calculate the edge locations
         edge_coeffs = self.fit_subpixel_edge(patch)
@@ -670,8 +719,12 @@ class SharpnessMeasure:
     def fit_subpixel_edge(self, patch: np.array) -> Any:
         """
         Calculates the exact edge location with a subpixel precison.
-        :param patch:
-        :return:
+
+        Args:
+            patch:
+        
+        Returns:
+            //todo
         """
         points = []
         # fit a cubic polynomial for each row
@@ -692,9 +745,13 @@ class SharpnessMeasure:
     def compute_esf(self, patch: np.array, edge_coeffs: Any) -> Any:
         """
         Constructs the ESF, the normalized ESF, and the LSF, checks their quality, and fits the theoretical functions.
-        :param patch:
-        :param edge_coeffs:
-        :return:
+        
+        Args:
+            patch:
+            edge_coeffs:
+        
+        Returns:
+            //todo
         """
         # Check if edge is in the correct list
         if abs(90 - np.rad2deg(np.arctan(edge_coeffs[0]))) > 15:
@@ -837,9 +894,12 @@ class SharpnessMeasure:
     def normalize_esf(self, esf: np.array, x: np.array) -> Tuple[Any, ...]:
         """
         Normalizes the ESF.
-        :param esf:
-        :param x:
-        :return:
+        Args:
+            esf:
+            x:
+        
+        Returns:
+            //todo
         """
         # Calculate initial values for curve fitting
         a0 = np.median(esf)
@@ -875,14 +935,18 @@ class SharpnessMeasure:
         """
         Evaluate the quality of the ESF by calculating the edge SNR and checking if it is above the threshold, and
         by calculating the R2 value of the curve fitting, and also checking if it is above the threshold value.
-        :param lsf_popt:
-        :param esf_norm_popt:
-        :param esf:
-        :param esf_norm:
-        :param v_min:
-        :param v_max:
-        :param x:
-        :return:
+        
+        Args:
+            lsf_popt:
+            esf_norm_popt:
+            esf:
+            esf_norm:
+            v_min:
+            v_max:
+            x:
+        
+        Returns:
+            //todo
         """
         if lsf_popt is None or esf_norm_popt is None:
             return False
@@ -928,8 +992,12 @@ class SharpnessMeasure:
     def calculate_rer(self, edge_list: List[np.array]) -> np.array:
         """
         Given the list of edges, calculates the RER value for each edge.
-        :param edge_list:
-        :return:
+        
+        Args:
+            edge_list:
+        
+        Returns:
+            //todo
         """
         rers = []
         for edge in edge_list:
@@ -946,8 +1014,12 @@ class SharpnessMeasure:
     def calculate_fwhm(self, edge_list: List[np.array]) -> np.array:
         """
         Given the list of edges, calculates the FWHM value for each edge.
-        :param edge_list:
-        :return:
+
+        Args:
+            edge_list:
+        
+        Returns:
+            //todo
         """
         fwhms = []
         for edge in edge_list:
@@ -970,8 +1042,12 @@ class SharpnessMeasure:
         """
         Given a list of edges, calculates the MTF curve for each edge, and returns the value at
         the Nyquist and half Nyquist frequencies.
-        :param edge_list:
-        :return:
+
+        Args:
+            edge_list:
+        
+        Returns:
+            //todo
         """
         mtf_nyq = []
         mtf_half_nyq = []
@@ -1000,7 +1076,9 @@ class SharpnessMeasure:
         Calculates the average MTF curve of the image.
         It uses a saved list of LSFs. Calculates the MTF curve for each LSF separately, then the mean and the
         standard deviation of the curves.
-        :return:
+        
+        Returns:
+            //todo
         """
         x_min = np.max([x[0] for x in np.array(self.raw_lsf_list)[:, 0]])
         x_max = np.min([x[-1] for x in np.array(self.raw_lsf_list)[:, 0]])
@@ -1027,6 +1105,7 @@ def sharpness_function_from_array(
 ) -> Any:
     """
     Generic function to apply either SNR algorithm for an image.
+
     Args:
         image: a numpy array containing your image
         metrics: A list of the metrics you wish to calculate. Available metrics: RER, FWHM, MTF.
@@ -1055,6 +1134,7 @@ def sharpness_function_from_fn(
 ) -> Any:
     """
     Generic function to apply either SNR algorithm for an image.
+
     Args:
         image: the path your image
         ext: the extension of your image
@@ -1083,6 +1163,7 @@ def sharpness_function_from_fn(
 def mtf_from_array(img: np.array, **kwargs: Any) -> Any:
     """
     Generic function to construct an average MTF curve of the image.
+
     Args:
         image: a numpy array containing your image
         kwargs: the SharpnessMeasure class has many tuneable parameters. If you wish to set any of them differently from
@@ -1114,12 +1195,18 @@ class SharpnessMetric(Metric):
     ) -> None:
         """
         The metric to measure sharpness within an Iquaflow experiment.
-        :param experiment_info:
-        :param ext:
-        :param metrics:
-        :param parallel:
-        :param njobs:
-        :param kwargs:
+        Args:
+experiment_info:
+        Args:
+ext:
+        Args:
+metrics:
+        Args:
+parallel:
+        Args:
+njobs:
+        Args:
+kwargs:
         """
 
         super().__init__()  # type: ignore

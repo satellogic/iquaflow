@@ -7,6 +7,7 @@ import seaborn as sns
 class ExperimentVisual:
     """
     This objects allows the user to manage the experiment visualization.
+    
     Args:
         df: pd.DataFrame. Dataframe containing the data to visualize.
         The user should add a dataframe that is suitable for the intended visualization.
@@ -28,11 +29,13 @@ class ExperimentVisual:
     ) -> pd.DataFrame:
         """
         This is an internal method that adapts an aggregated Multiindex dataframe for some specific visualizations.
+        
         Args:
             var (Optional[str]): Variable label that will contain the yaxis values in a plot.
             only_mean (Optional[bool]): Whether if the adapter considers only mean or also +/- std.
+        
         Returns:
-            (pd.DataFrame): Adapted dataframe.
+            Adapted dataframe.
         """
         df1 = self.df
         a, b, c = [], [], []
@@ -71,8 +74,6 @@ class ExperimentVisual:
             legend_var (Optional[str]): The column names in the dataframe. This parameter is used when plot_mean_std is set to False.
             title (Optional[str]): Optional title, default is None.
             plot_mean_std (Optional[bool]): Whether if the user wants to plot mean and std from an aggregated dataframe.
-        Returns:
-            (None): None.
         """
         df = self.df
         is_agg = df.columns.nlevels > 1

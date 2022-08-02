@@ -1,5 +1,5 @@
-iquaflow package
-=====================
+API Reference
+================
 
 Subpackages
 -----------
@@ -9,12 +9,22 @@ Subpackages
 
    iquaflow.datasets
    iquaflow.experiments
+   iquaflow.metrics
+   iquaflow.quality_metrics
 
 Submodules
 ----------
 
+iquaflow.aws\_utils module
+--------------------------
+
+.. automodule:: iquaflow.aws_utils
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 iquaflow.ds\_stats module
-------------------------------
+-------------------------
 
 .. automodule:: iquaflow.ds_stats
    :members:
@@ -22,7 +32,7 @@ iquaflow.ds\_stats module
    :show-inheritance:
 
 iquaflow.sanity module
----------------------------
+----------------------
 
 .. automodule:: iquaflow.sanity
    :members:
@@ -30,7 +40,7 @@ iquaflow.sanity module
    :show-inheritance:
 
 iquaflow.version module
-----------------------------
+-----------------------
 
 .. automodule:: iquaflow.version
    :members:
