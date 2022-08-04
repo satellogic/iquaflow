@@ -611,11 +611,12 @@ class Regressor:
         )  # path to dataset folder
         testdsinput = os.path.dirname(image_files[0])  # path to images folder
         default_img_size = Image.open(image_files[0]).size
+        num_crops = int(self.crop_size / default_img_size[0])
         test_dataset = Dataset(
             "test",
             testds,
             testdsinput,
-            self.num_crops,  # regressor-specific on training as well
+            num_crops,  # regressor-specific on training as well
             self.crop_size,  # regressor-specific on training as well
             1.0,
             default_img_size,
@@ -1045,7 +1046,6 @@ if __name__ == "__main__":
     print(args)
     print("Preparing Regressor")
     reg = Regressor(args)
-    args.num_crops = int(reg.crop_size / args.input_size)
 
     # plot stats
     stats_file = os.path.join(reg.output_path, "stats.csv")
