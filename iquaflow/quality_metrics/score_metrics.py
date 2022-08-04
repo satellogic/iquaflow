@@ -61,6 +61,7 @@ class ScoreMetrics(QualityMetrics):
             "https://image-quality-framework.s3.eu-west-1.amazonaws.com/iq-tool-box/models/regressor/training-results-whole/rer/test_AerialImageDataset_batchsize16_lr0.01_weightdecay0.001_numregs40_rer_epochs200_numcrops10_splits0.445-0.112_inputsize1024-1024_momentum0.9_softthreshold0.3/checkpoint_epoch6.pth",
             "https://image-quality-framework.s3.eu-west-1.amazonaws.com/iq-tool-box/models/regressor/training-results-whole/snr/test_AerialImageDataset_batchsize8_lr0.01_weightdecay0.001_numregs40_snr_epochs200_numcrops10_splits0.445-0.112_inputsize1024-1024_momentum0.9_softthreshold0.3/checkpoint_epoch148.pth",
         ],
+        input_size: Optional[int] = None,
     ) -> None:
         self.metric_names = metric_names
         self.config_filenames = config_filenames
@@ -68,6 +69,7 @@ class ScoreMetrics(QualityMetrics):
         self.ranges = ranges
         self.weights = weights
         self.default_checkpoint_urls = default_checkpoint_urls
+        self.input_size = input_size
         """  # do not init (need too much memory to keep all QMRNets on init)
         self.regressors = []
         self.submetric_names = []
@@ -112,23 +114,33 @@ class ScoreMetrics(QualityMetrics):
             quality_metric: Optional[Any] = None
             if metric == "sigma":
                 quality_metric = GaussianBlurMetrics(
-                    self.config_filenames[idx], self.default_checkpoint_urls[idx]
+                    self.config_filenames[idx],
+                    self.default_checkpoint_urls[idx],
+                    self.input_size,
                 )
             elif metric == "sharpness":
                 quality_metric = NoiseSharpnessMetrics(
-                    self.config_filenames[idx], self.default_checkpoint_urls[idx]
+                    self.config_filenames[idx],
+                    self.default_checkpoint_urls[idx],
+                    self.input_size,
                 )
             elif metric == "scale":
                 quality_metric = GSDMetrics(
-                    self.config_filenames[idx], self.default_checkpoint_urls[idx]
+                    self.config_filenames[idx],
+                    self.default_checkpoint_urls[idx],
+                    self.input_size,
                 )
             elif metric == "rer":
                 quality_metric = RERMetrics(
-                    self.config_filenames[idx], self.default_checkpoint_urls[idx]
+                    self.config_filenames[idx],
+                    self.default_checkpoint_urls[idx],
+                    self.input_size,
                 )
             elif metric == "snr":
                 quality_metric = SNRMetrics(
-                    self.config_filenames[idx], self.default_checkpoint_urls[idx]
+                    self.config_filenames[idx],
+                    self.default_checkpoint_urls[idx],
+                    self.input_size,
                 )
             else:
                 continue
