@@ -1046,8 +1046,6 @@ if __name__ == "__main__":
     print(args)
     print("Preparing Regressor")
     reg = Regressor(args)
-    args.num_crops = int(reg.crop_size / args.input_size)
-    reg.num_crops = int(reg.crop_size / args.input_size)
 
     # plot stats
     stats_file = os.path.join(reg.output_path, "stats.csv")
