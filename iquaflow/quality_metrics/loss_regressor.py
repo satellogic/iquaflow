@@ -62,21 +62,21 @@ def argparse_regressor_loss(
     return argparser
 
 
-def init_regressor_loss(
+def init_regressor_loss(  # crop_size (defining network's input size) is mandatory here
     opt: Any,
 ) -> Any:  # opt must be the output of argparse after parse_args(), containing "regressor_loss", "regressor_criterion" and "cuda"
     if opt.regressor_loss == "rer":
-        quality_metric = RERMetrics()
+        quality_metric = RERMetrics(input_size=opt.crop_size)
     elif opt.regressor_loss == "snr":
-        quality_metric = SNRMetrics()  # type: ignore
+        quality_metric = SNRMetrics(input_size=opt.crop_size)  # type: ignore
     elif opt.regressor_loss == "sigma":
-        quality_metric = GaussianBlurMetrics()  # type: ignore
+        quality_metric = GaussianBlurMetrics(input_size=opt.crop_size)  # type: ignore
     elif opt.regressor_loss == "sharpness":
-        quality_metric = NoiseSharpnessMetrics()  # type: ignore
+        quality_metric = NoiseSharpnessMetrics(input_size=opt.crop_size)  # type: ignore
     elif opt.regressor_loss == "scale":
-        quality_metric = GSDMetrics()  # type: ignore
+        quality_metric = GSDMetrics(input_size=opt.crop_size)  # type: ignore
     elif opt.regressor_loss == "score":
-        quality_metric = ScoreMetrics()  # type: ignore
+        quality_metric = ScoreMetrics(input_size=opt.crop_size)  # type: ignore
     if opt.regressor_criterion is None:
         quality_metric_criterion = nn.BCELoss(reduction="mean")
     elif opt.regressor_criterion == "BCELoss":
