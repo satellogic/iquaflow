@@ -7,6 +7,7 @@ setup(
     package_data={
         'iquaflow': [
             'quality_metrics/cfgs_example/*.cfg',
+            'quality_metrics/cfgs_best/*.cfg',
             'datasets/dataset_labels/RER/*.json',
             'datasets/dataset_labels/SNR/*.json'
         ]
