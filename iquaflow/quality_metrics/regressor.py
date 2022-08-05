@@ -611,7 +611,7 @@ class Regressor:
         )  # path to dataset folder
         testdsinput = os.path.dirname(image_files[0])  # path to images folder
         default_img_size = Image.open(image_files[0]).size
-        num_crops = int(self.crop_size / default_img_size[0])
+        num_crops = int(self.crop_size[0] / default_img_size[0])
         test_dataset = Dataset(
             "test",
             testds,
