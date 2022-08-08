@@ -585,7 +585,7 @@ class Regressor:
                 self.checkpoint_path = None  # type: ignore
 
         if self.checkpoint_path:
-            self.net = torch.load(self.checkpoint_path)  # type: ignore
+            self.net = torch.load(self.checkpoint_path, map_location=self.device)  # type: ignore
             # self.net.load_state_dict(torch.load(self.checkpoint_path))
             self.net = self.net.to(self.device)
             if self.cuda:
