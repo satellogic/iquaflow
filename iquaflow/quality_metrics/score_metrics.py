@@ -113,35 +113,40 @@ class ScoreMetrics(QualityMetrics):
             # init regressor instance
             quality_metric: Optional[Any] = None
             if metric == "sigma":
-                quality_metric = GaussianBlurMetrics(
-                    self.config_filenames[idx],
-                    self.default_checkpoint_urls[idx],
-                    self.input_size,
-                )
+                if self.input_size is not None:
+                    quality_metric = GaussianBlurMetrics(
+                        self.config_filenames[idx], self.default_checkpoint_urls[idx]
+                    )
+                else:
+                    quality_metric = GaussianBlurMetrics(self.input_size)
             elif metric == "sharpness":
-                quality_metric = NoiseSharpnessMetrics(
-                    self.config_filenames[idx],
-                    self.default_checkpoint_urls[idx],
-                    self.input_size,
-                )
+                if self.input_size is not None:
+                    quality_metric = NoiseSharpnessMetrics(
+                        self.config_filenames[idx], self.default_checkpoint_urls[idx]
+                    )
+                else:
+                    quality_metric = NoiseSharpnessMetrics(self.input_size)
             elif metric == "scale":
-                quality_metric = GSDMetrics(
-                    self.config_filenames[idx],
-                    self.default_checkpoint_urls[idx],
-                    self.input_size,
-                )
+                if self.input_size is not None:
+                    quality_metric = GSDMetrics(
+                        self.config_filenames[idx], self.default_checkpoint_urls[idx]
+                    )
+                else:
+                    quality_metric = GSDMetrics(self.input_size)
             elif metric == "rer":
-                quality_metric = RERMetrics(
-                    self.config_filenames[idx],
-                    self.default_checkpoint_urls[idx],
-                    self.input_size,
-                )
+                if self.input_size is not None:
+                    quality_metric = RERMetrics(
+                        self.config_filenames[idx], self.default_checkpoint_urls[idx]
+                    )
+                else:
+                    quality_metric = RERMetrics(self.input_size)
             elif metric == "snr":
-                quality_metric = SNRMetrics(
-                    self.config_filenames[idx],
-                    self.default_checkpoint_urls[idx],
-                    self.input_size,
-                )
+                if self.input_size is not None:
+                    quality_metric = SNRMetrics(
+                        self.config_filenames[idx], self.default_checkpoint_urls[idx]
+                    )
+                else:
+                    quality_metric = SNRMetrics(self.input_size)
             else:
                 continue
             # deploy regressor instance
