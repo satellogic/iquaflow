@@ -8,6 +8,7 @@ setup(
         'iquaflow': [
             'quality_metrics/cfgs_example/*.cfg',
             'quality_metrics/cfgs_best/*.cfg',
+            'quality_metrics/cfgs_multihead/*.cfg',
             'datasets/dataset_labels/RER/*.json',
             'datasets/dataset_labels/SNR/*.json'
         ]
