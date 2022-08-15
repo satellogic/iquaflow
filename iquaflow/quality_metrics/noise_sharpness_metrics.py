@@ -9,13 +9,17 @@ from iquaflow.quality_metrics.regressor import Regressor, parse_params_cfg
 class NoiseSharpnessMetrics(QualityMetrics):
     def __init__(
         self,
-        cfg_path: str = os.path.join(
-            os.path.dirname(os.path.realpath(__file__)),
-            "cfgs_best/test_AerialImageDataset_batchsize4_lr0.01_weightdecay0.0001_numregs9_sharpness_epochs200_numcrops10_splits0.445-0.112_inputsize1024-1024_momentum0.9_softthreshold0.3.cfg",
-        ),
-        checkpoint_url: str = "https://image-quality-framework.s3.eu-west-1.amazonaws.com/iq-tool-box/models/regressor/training-results-whole/sharpness/test_AerialImageDataset_batchsize4_lr0.01_weightdecay0.0001_numregs9_sharpness_epochs200_numcrops10_splits0.445-0.112_inputsize1024-1024_momentum0.9_softthreshold0.3/checkpoint_epoch143.pth",
+        cfg_path: Optional[str] = None,
+        checkpoint_url: Optional[str] = None,
         input_size: Optional[int] = None,
     ) -> None:
+        if cfg_path is None:
+            cfg_path = os.path.join(
+                os.path.dirname(os.path.realpath(__file__)),
+                "cfgs_best/test_AerialImageDataset_batchsize4_lr0.01_weightdecay0.0001_numregs9_sharpness_epochs200_numcrops10_splits0.445-0.112_inputsize1024-1024_momentum0.9_softthreshold0.3.cfg",
+            )
+        if checkpoint_url is None:
+            checkpoint_url = "https://image-quality-framework.s3.eu-west-1.amazonaws.com/iq-tool-box/models/regressor/training-results-whole/sharpness/test_AerialImageDataset_batchsize4_lr0.01_weightdecay0.0001_numregs9_sharpness_epochs200_numcrops10_splits0.445-0.112_inputsize1024-1024_momentum0.9_softthreshold0.3/checkpoint_epoch143.pth"
         if input_size is not None:
             dict_ckpts = self.get_dict_ckpts()
             list_keys = [
@@ -23,10 +27,10 @@ class NoiseSharpnessMetrics(QualityMetrics):
             ]
             if len(list_keys) > 0:
                 key = list_keys[0]
-                cfg_path = os.path.join(
-                    os.path.dirname(os.path.realpath(__file__)), key
+                cfg_path = str(
+                    os.path.join(os.path.dirname(os.path.realpath(__file__)), key)
                 )
-                checkpoint_url = dict_ckpts[key]
+                checkpoint_url = str(dict_ckpts[key])
         parser = parse_params_cfg(default_cfg_path=cfg_path)
         args, uk_args = parser.parse_known_args()  # [] or use defaults
         # dict_args = vars(args)  # for debugging

@@ -21,5 +21,5 @@ fi
 path="${myfolder}"/*.cfg
 for file in $path
 do
-   python3 regressor.py --cfg_path=$file --cuda --gpus "$gpu" --seed $seed --data_only --overwrite_modifiers --overwrite_crops ; 
+   python3 regressor.py --cfg_path=$file --cuda --gpus "$gpu" --seed $seed --overwrite_crops ; #overwrite_modifiers 
 done
