@@ -348,10 +348,10 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
                                     self.crop_size[0] * resize_ratio_y,
                                     self.crop_size[1] * resize_ratio_x,
                                 )
-                                crop_resized_coords_y += (
+                                crop_resized_coords_y += int(
                                     self.crop_size[0] - crop_size_resized[0]
                                 )
-                                crop_resized_coords_x += (
+                                crop_resized_coords_x += int(
                                     self.crop_size[1] - crop_size_resized[1]
                                 )
                                 preproc_image = transforms.functional.crop(
