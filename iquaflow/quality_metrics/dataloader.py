@@ -354,6 +354,10 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
                                 crop_resized_coords_x += int(
                                     self.crop_size[1] - crop_size_resized[1]
                                 )
+                                if crop_resized_coords_y < 0:
+                                    crop_resized_coords_y = 0
+                                if crop_resized_coords_x < 0:
+                                    crop_resized_coords_x = 0
                                 preproc_image = transforms.functional.crop(
                                     image_tensor,
                                     crop_resized_coords_y,
