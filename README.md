@@ -1,8 +1,8 @@
-# ![iquaflow](https://github.com/satellogic/iquaflow/blob/main/docs/source/iquaflow_logo_mini.png "iquaflow") <br /> A new image quality framework
+# ![iquaflow](https://github.com/satellogic/iquaflow/blob/main/docs/source/iquaflow_logo_mini.png "iquaflow") <br /> An image quality framework
 
 iquaflow is an image quality framework that aims at providing a set of tools to assess image quality. One of the main contributions of this framework is that it allows to measure quality by using the performance of AI models trained on the images as a proxy. 
 
-Usage examples can be found within [our documentation](http://iquaflow.readthedocs.io/) on Read the Docs.
+Usage examples and a detailed description of our framwework can be found within [our documentation](http://iquaflow.readthedocs.io/) on Read the Docs.
 
 ## Use cases
 
