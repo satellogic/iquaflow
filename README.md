@@ -1,4 +1,4 @@
-# ![iquaflow](https://github.com/satellogic/iquaflow/blob/main/docs/source/iquaflow_logo_mini.png) <br /> An image quality framework
+# ![iquaflow](https://github.com/satellogic/iquaflow/raw/main/docs/source/iquaflow_logo_mini.png) <br /> An image quality framework
 
 iquaflow is an image quality framework that aims at providing a set of tools to assess image quality. One of the main contributions of this framework is that it allows to measure quality by using the performance of AI models trained on the images as a proxy. The framework includes ready-to-use metrics such as SNR, MTF, FWHM or RER. It also includes modifiers to alter images (noise, blur, jpeg compression, quantization, etc). In both cases, metrics and modifiers, it is easy to implement new ones. Adittionaly, we include dataset preparation and sanity check tools and all the necessary tools to carry new experiments. 
 
