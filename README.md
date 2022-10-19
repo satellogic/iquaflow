@@ -22,10 +22,10 @@ Usage examples and a detailed description of our framwework can be found within 
 
 ## Installation
 
-You can install iquaflow using pip within the main repository folder:
+You can install iquaflow using pip:
 
 ```
-pip install -e .
+pip install iquaflow 
 ```
 
 Read more complete installation instructions at [our documentation](http://iquaflow.readthedocs.io/).

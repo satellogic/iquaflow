@@ -23,7 +23,7 @@ Installation
 
 You can install iquaflow using pip::
 
-  pip install -e . 
+  pip install iquaflow 
 
 Alternatively you can use docker. The Dockerfile and a whole template for a use case study repository is available as a cookiecutter in `here <https://github.com/satellogic/iquaflow-use-case-cookiecutter>`_. 
 
