@@ -326,6 +326,7 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
                                     (torch.squeeze(preproc_image))
                                 )
                             )
+                            """
                             # (gsd case): adapt rescaled coords to current mod_size
                             if self.mod_keys[midx] == "scale" and not os.path.exists(
                                 permut_path
@@ -370,6 +371,7 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
                                         (torch.squeeze(preproc_image))
                                     )
                                 )
+                            """
                             if (
                                 self.mod_keys[midx] == "rer" and midx == 0
                             ):  # do it only for first modifier case (same crop for all modifiers)

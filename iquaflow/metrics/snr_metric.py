@@ -313,7 +313,7 @@ def snr_function_from_fn(
 ) -> Tuple[Any, Any]:
     """
     Generic function to apply either SNR algorithm for an image.
-    
+
     Args:
         image_path: the path to your image
         ext: the extension of the image
