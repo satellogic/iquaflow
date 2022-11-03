@@ -20,11 +20,11 @@ class DsStats:
     """
     Perform stats to image datasets and annotations.
     It can either work as standalone class or with DSWrapper class.
-    
+
     Args:
         data_path: The full path to the dataset to be analized
         output_path: the full path to the output (stats / plots)
-    
+
     Attributes:
         data_path: The full path to the dataset to be analized
         output_path: the full path to the output (stats / plots)
@@ -332,7 +332,7 @@ class DsStats:
 
         Args:
             imgs_lst: List of images (coco json "images" field).
-        
+
         Returns:
             stats: List of stats.
         """
@@ -437,7 +437,7 @@ class DsStats:
 
         Args:
             ans: List of annotations (coco json "annotations" field).
-        
+
         Returns:
             stats: Aspect ratios, bin edges and counts.
         """
@@ -528,7 +528,7 @@ class DsStats:
         """
         This function returns the result of operation func on the in_field attribute from the geodataframe gdf.
         When the input element row from the geodataframe is None or similar, the return is also None for this element.
-        
+
         Args:
             gdf: Input geodataframe to add info to.
             func: Function that will add further info to the dataframe
@@ -553,7 +553,7 @@ class DsStats:
 
         Args:
             feat: Input geometrical feature.
-        
+
         Returns:
             Output geometrical rotated rectangle.
         """
@@ -569,7 +569,7 @@ class DsStats:
 
         Args:
             feat: Input geometrical feature.
-        
+
         Returns:
             Output bounding box rectangle.
         """
@@ -585,7 +585,7 @@ class DsStats:
 
         Args:
             feat: Input geometrical feature.
-        
+
         Returns:
             area
         """
@@ -601,7 +601,7 @@ class DsStats:
 
         Args:
             feat: Input geometrical feature.
-        
+
         Returns:
             compactness
         """
@@ -619,7 +619,7 @@ class DsStats:
 
         Args:
             feat: Input geometrical feature.
-        
+
         Returns:
             high, width, angle from the rotated box
         """
@@ -668,7 +668,7 @@ class DsStats:
 
         Args:
             feat: Input geometrical feature.
-        
+
         Returns:
             x,y centroid position
         """
@@ -688,7 +688,7 @@ class DsStats:
         Args:
             field: Geodataframe to count stats from
             field: Name of the attribute, column or field to calc stats from
-        
+
         Returns:
             returns the min, mean, max from a dataframe field
         """

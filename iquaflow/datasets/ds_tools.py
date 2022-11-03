@@ -156,7 +156,7 @@ class DSWrapper:
 
         Args:
             ds_modifer: Object to modify the current DSWrapper
-        
+
         Returns:
             A new DSWrapper modified by DSModifier
         """
@@ -251,7 +251,7 @@ class DSModifier:
             data_path: Path of the root folder of the dataset
             data_input: Path of the folder containing images
             ds_wrapper: DSWrapper.
-        
+
         Returns:
             mod_data_input: Path of the folder containing modified images
             mod_data_path: Path of the modified root folder of the dataset
@@ -280,7 +280,7 @@ class DSModifier:
 
         Args:
             ds_wrapper: DSWrapper.
-        
+
         Returns:
             ds_wrapper: DSWrapper.
         """

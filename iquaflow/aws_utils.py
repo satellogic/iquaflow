@@ -110,7 +110,7 @@ def download_s3_filename(
         bucket_name: the name of the s3 bucket
         s3_filename: the filename in the s3 bucket
         local_filename: The local filename in the local file system
-    
+
     Returns:
         The local filename in the local file system
     """

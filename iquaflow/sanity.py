@@ -151,7 +151,7 @@ class SanityCheck:
         """
         This will remove all corrupted samples following the logic in the flags.\n
         The new sanitized dataset is located in output_path attribute from the SanityCheck instance
-        
+
         Args:
             problems: List of problems
             missing: When set, it removes any sample that has a Nan value in any of the required fields. Only used in geojeson-like annotations dataset. default True.
@@ -240,7 +240,7 @@ class SanityCheck:
             2. try to fix the corrupted cases.
             3. remove all corrupted samples that were not able to fix.
         The new sanitized dataset is located in output_path attribute from the SanityCheck instance
-        
+
         Args:
             missing: When set, it removes any sample that has a Nan value in any of the required fields, Only used in geojeson-like annotations dataset, default True.
             empty_geom: When set, it removes samples with empty annotations, Only used in geojeson-like annotations dataset, default True.
@@ -271,10 +271,10 @@ class SanityCheck:
     def _rm_geo_nan(self, gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
         """
         Removes all rows containing a Nan value in any of the Required field columns.
-        
+
         Args:
             gdf: GeoDataFrame to treat.
-        
+
         Returns:
             Treated GeoDataFrame with corrupted (nan corruption kind) rows ereased.
         """
@@ -286,10 +286,10 @@ class SanityCheck:
     def _rm_geo_empty(self, gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
         """
         Removes all rows containing a empty geometries in any of the Required field columns.
-        
+
         Args:
             gdf: GeoDataFrame to treat.
-        
+
         Returns:
             Treated GeoDataFrame with empty geometries rows ereased.
         """
@@ -299,10 +299,10 @@ class SanityCheck:
     def _fix_geoms(self, gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
         """
         Try to fix geometries with buffer = 0
-        
+
         Args:
             gdf: GeoDataFrame to treat.
-        
+
         Returns:
             Treated GeoDataFrame.
         """
@@ -314,10 +314,10 @@ class SanityCheck:
     ) -> gpd.GeoDataFrame:
         """
         Removes all rows containing a valid geometries in any of the Required field columns.
-        
+
         Args:
             gdf: GeoDataFrame to treat.
-        
+
         Returns:
             Treated GeoDataFrame with valid geometries rows ereased.
         """
@@ -333,7 +333,7 @@ class SanityCheck:
 
         Args:
             im: containing 'file_name' key
-        
+
         Returns:
             is valid.
         """
@@ -401,7 +401,7 @@ class SanityCheck:
 
         Args:
             imgs_lst: List of images (coco json "images" field).
-        
+
         Returns:
             problems: List of errors.
         """
@@ -468,7 +468,7 @@ def clean_list(lst: List[Any], sbis_to_clean: List[int]) -> List[Any]:
 class Rasterize:
     """
     Generates raster masks from geometries in geojson annotations. Masks will be equal in size to its corresponding images.
-    
+
     Args:
         geojson_fn: Annotations file in format of geojson
         main_df: Loaded dataframe from annoations file.
@@ -540,7 +540,7 @@ class Rasterize:
         Args:
             ref_geotiff: Image filename.
             output_filename: Output mask filaname.
-        
+
         Returns:
             The initial mask array that has been saved.
         """
@@ -573,7 +573,7 @@ class Rasterize:
 
         Args:
             ref_geotiff: Reference geotiff image.
-        
+
         Returns:
             the image array, list of geometries and class ids, output_fn for the mask.
         """

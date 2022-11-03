@@ -69,12 +69,12 @@ class ScoreMetrics(QualityMetrics):
             weights = [0.2, 0.2, 0.2, 0.2, 0.2]
         if default_checkpoint_urls is None:
             default_checkpoint_urls = [
-                    "https://image-quality-framework.s3.eu-west-1.amazonaws.com/iq-tool-box/models/regressor/training-results-whole/blur/test_AerialImageDataset_batchsize16_lr0.01_weightdecay0.0001_numregs50_sigma_epochs200_numcrops10_splits0.445-0.112_inputsize1024-1024_momentum0.9_softthreshold0.3/checkpoint_epoch68.pth",
-                    "https://image-quality-framework.s3.eu-west-1.amazonaws.com/iq-tool-box/models/regressor/training-results-whole/sharpness/test_AerialImageDataset_batchsize4_lr0.01_weightdecay0.0001_numregs9_sharpness_epochs200_numcrops10_splits0.445-0.112_inputsize1024-1024_momentum0.9_softthreshold0.3/checkpoint_epoch143.pth",
-                    "https://image-quality-framework.s3.eu-west-1.amazonaws.com/iq-tool-box/models/regressor/training-results-whole/scale/test_AerialImageDataset_batchsize16_lr0.01_weightdecay1e-05_numregs10_scale_epochs200_numcrops10_splits0.445-0.112_inputsize1024-1024_momentum0.9_softthreshold0.3/checkpoint_epoch0.pth",
-                    "https://image-quality-framework.s3.eu-west-1.amazonaws.com/iq-tool-box/models/regressor/training-results-whole/rer/test_AerialImageDataset_batchsize16_lr0.01_weightdecay0.001_numregs40_rer_epochs200_numcrops10_splits0.445-0.112_inputsize1024-1024_momentum0.9_softthreshold0.3/checkpoint_epoch6.pth",
-                    "https://image-quality-framework.s3.eu-west-1.amazonaws.com/iq-tool-box/models/regressor/training-results-whole/snr/test_AerialImageDataset_batchsize8_lr0.01_weightdecay0.001_numregs40_snr_epochs200_numcrops10_splits0.445-0.112_inputsize1024-1024_momentum0.9_softthreshold0.3/checkpoint_epoch148.pth",
-                ]
+                "https://image-quality-framework.s3.eu-west-1.amazonaws.com/iq-tool-box/models/regressor/training-results-whole/blur/test_AerialImageDataset_batchsize16_lr0.01_weightdecay0.0001_numregs50_sigma_epochs200_numcrops10_splits0.445-0.112_inputsize1024-1024_momentum0.9_softthreshold0.3/checkpoint_epoch68.pth",
+                "https://image-quality-framework.s3.eu-west-1.amazonaws.com/iq-tool-box/models/regressor/training-results-whole/sharpness/test_AerialImageDataset_batchsize4_lr0.01_weightdecay0.0001_numregs9_sharpness_epochs200_numcrops10_splits0.445-0.112_inputsize1024-1024_momentum0.9_softthreshold0.3/checkpoint_epoch143.pth",
+                "https://image-quality-framework.s3.eu-west-1.amazonaws.com/iq-tool-box/models/regressor/training-results-whole/scale/test_AerialImageDataset_batchsize16_lr0.01_weightdecay1e-05_numregs10_scale_epochs200_numcrops10_splits0.445-0.112_inputsize1024-1024_momentum0.9_softthreshold0.3/checkpoint_epoch0.pth",
+                "https://image-quality-framework.s3.eu-west-1.amazonaws.com/iq-tool-box/models/regressor/training-results-whole/rer/test_AerialImageDataset_batchsize16_lr0.01_weightdecay0.001_numregs40_rer_epochs200_numcrops10_splits0.445-0.112_inputsize1024-1024_momentum0.9_softthreshold0.3/checkpoint_epoch6.pth",
+                "https://image-quality-framework.s3.eu-west-1.amazonaws.com/iq-tool-box/models/regressor/training-results-whole/snr/test_AerialImageDataset_batchsize8_lr0.01_weightdecay0.001_numregs40_snr_epochs200_numcrops10_splits0.445-0.112_inputsize1024-1024_momentum0.9_softthreshold0.3/checkpoint_epoch148.pth",
+            ]
         self.default_checkpoint_urls = default_checkpoint_urls
         self.input_size = input_size
         self.metric_names = metric_names
