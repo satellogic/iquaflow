@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import cv2
 import numpy as np
+import skimage.io
 
 from .ds_exceptions import DSAnnotationsNotFound, DSNotFound
 
@@ -406,14 +407,14 @@ class DSModifier_dir(DSModifier):
             file_path = os.path.join(data_input, data_file)
             if os.path.isdir(file_path):
                 continue
-            loaded = cv2.imread(file_path, -1)
+            loaded = (skimage.io.imread(file_path).astype(float)*256).astype('uint8') # cv2.imread(file_path, -1)
             assert loaded.ndim == 2 or loaded.ndim == 3, (
                 "(load_img): File " + file_path + " not valid image"
             )
             # size_raw+= np.size(loaded)
             imgp = self._mod_img(loaded)
             # print(loaded.shape)
-            cv2.imwrite(os.path.join(dst, data_file), imgp)
+            skimage.io.imsave(os.path.join(dst, data_file),imgp) # cv2.imwrite(os.path.join(dst, data_file), imgp)
         return input_name
 
     def _mod_img(self, img: np.array) -> np.array:

@@ -176,6 +176,16 @@ def parse_params_cfg(default_cfg_path: str = "config.cfg") -> Any:
             "--pretrained",
             default=True,
         )
+    if config.has_option("HYPERPARAMS", "num_channels"):
+        parser.add_argument(
+            "--num_channels",
+            default=eval(config["HYPERPARAMS"]["num_channels"]),
+        )
+    else:
+        parser.add_argument(
+            "--num_channels",
+            default=3,
+        )
     tmp_args, uk_args = parser.parse_known_args()
     outputpath = tmp_args.outputpath
     trainid = tmp_args.trainid
@@ -342,6 +352,7 @@ class Regressor:
         self.batch_size = int(args.batch_size)
         self.network = args.network
         self.pretrained = args.pretrained
+        self.num_channels = args.num_channels
 
         # Get Regressor Params from dicts
         self.modifier_params = args.modifier_params
@@ -368,10 +379,10 @@ class Regressor:
         self.cCROP = get_tensor_crop_transform(self.crop_size, "center")
         # Create Network
         if len(self.params) == 1:  # Single Head
-            self.net = create_network(self.network, self.pretrained, self.num_regs[0])
+            self.net = create_network(self.network, self.pretrained, self.num_regs[0], self.num_channels)
         else:  # MultiHead
             self.net = MultiHead(
-                create_network(self.network, self.pretrained), self.num_regs
+                create_network(self.network, self.pretrained), self.num_regs, self.num_channels
             )
         # Training HyperParams
         self.optimizer = torch.optim.SGD(

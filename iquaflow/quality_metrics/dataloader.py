@@ -9,6 +9,7 @@ from PIL import Image
 from torch.autograd import Variable
 from torchvision import transforms
 from torchvision.utils import save_image
+import skimage.io
 
 from iquaflow.datasets import DSWrapper
 from iquaflow.quality_metrics.tools import (
@@ -86,9 +87,9 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
         ):  # cropped and modified
             filename = self.lists_crop_files[idx]
             # filename_noext = os.path.splitext(os.path.basename(filename))[0]
-            image = Image.open(filename)
+            image = skimage.io.imread(filename) # image = Image.open(filename)
             image_tensor = transforms.functional.to_tensor(image)  # .unsqueeze_(0)
-            x = force_rgb(image_tensor)  # usgs case (nth dimensions, e.g. depth)
+            x = image_tensor # x = force_rgb(image_tensor)  # usgs case (nth dimensions, e.g. depth)
             y = torch.tensor(self.crop_mod_params[idx])
             param = self.crop_mod_keys[idx]
         elif (
@@ -96,9 +97,9 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
         ):  # modified but not cropped
             filename = self.lists_mod_files[idx]
             # filename_noext = os.path.splitext(os.path.basename(filename))[0]
-            image = Image.open(filename)
+            image = skimage.io.imread(filename) # image = Image.open(filename)
             image_tensor = transforms.functional.to_tensor(image)  # .unsqueeze_(0)
-            x = force_rgb(image_tensor)  # usgs case (nth dimensions, e.g. depth)
+            x = image_tensor # x = force_rgb(image_tensor)  # usgs case (nth dimensions, e.g. depth)
             y = torch.tensor(self.mod_params[idx])
             param = self.mod_keys[idx]
         elif (
@@ -106,17 +107,17 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
         ):  # cropped but no modified
             filename = self.lists_crop_files[idx]
             # filename_noext = os.path.splitext(os.path.basename(filename))[0]
-            image = Image.open(filename)
+            image = skimage.io.imread(filename) # image = Image.open(filename)
             image_tensor = transforms.functional.to_tensor(image)  # .unsqueeze_(0)
-            x = force_rgb(image_tensor)  # usgs case (nth dimensions, e.g. depth)
+            x = image_tensor # x = force_rgb(image_tensor)  # usgs case (nth dimensions, e.g. depth)
             y = torch.tensor(0)
             param = ""
         else:
             filename = self.lists_files[idx]
             # filename_noext = os.path.splitext(os.path.basename(filename))[0]
-            image = Image.open(filename)
+            image = skimage.io.imread(filename) # image = Image.open(filename)
             image_tensor = transforms.functional.to_tensor(image)  # .unsqueeze_(0)
-            x = force_rgb(image_tensor)
+            x = image_tensor # x = force_rgb(image_tensor)
             y = torch.tensor(0)
             param = ""
         return filename, param, Variable(x), Variable(y)
@@ -253,7 +254,7 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
                             + filename_noext
                             + "_crop"
                             + str(cidx + 1)
-                            + ".png"
+                            + ".tif"
                         )
                         # if crop does not exist and neither pkl of crop permutation, if it is not the first one, close
                         if (
@@ -285,9 +286,10 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
                                 + " "
                                 + str(self.mod_params[midx])
                             )
-                            image = Image.open(filename)
-                            if image.mode != "RGB":
-                                image = image.convert("RGB")
+                            image = skimage.io.imread(filename)
+                             # image = Image.open(filename)
+                            #if image.mode != "RGB":
+                            #    image = image.convert("RGB")
                             image_tensor = transforms.functional.to_tensor(
                                 image
                             ).unsqueeze_(0)
@@ -321,11 +323,14 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
                                 self.crop_size[1],
                             )
                             # preproc_image = self.tCROP(image_tensor)
+                            '''
                             crop_array = np.array(
                                 transforms.functional.to_pil_image(
                                     (torch.squeeze(preproc_image))
                                 )
                             )
+                            '''
+                            crop_array = (np.moveaxis(preproc_image.squeeze().numpy(),0,-1)*256).astype('uint8')
                             """
                             # (gsd case): adapt rescaled coords to current mod_size
                             if self.mod_keys[midx] == "scale" and not os.path.exists(
@@ -373,7 +378,7 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
                                 )
                             """
                             if (
-                                self.mod_keys[midx] == "rer" and midx == 0
+                                self.mod_keys[midx] == "rer" and midx == 0 and crop_array.shape[2] <= 3
                             ):  # do it only for first modifier case (same crop for all modifiers)
                                 # check crop requirement 100 times (at max)
                                 check_count = 100
@@ -400,13 +405,16 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
                                         self.crop_size[0],
                                         self.crop_size[1],
                                     )
+                                    '''
                                     crop_array = np.array(
                                         transforms.functional.to_pil_image(
                                             (torch.squeeze(preproc_image))
                                         )
                                     )
+                                    '''
+                                    crop_array = (np.moveaxis(preproc_image.squeeze().numpy(),0,-1)*256).astype('uint8')
                             elif (
-                                self.mod_keys[midx] == "snr" and midx == 0
+                                self.mod_keys[midx] == "snr" and midx == 0 and crop_array.shape[2] <= 3
                             ):  # do it only for first modifier case (same crop for all modifiers)
                                 # check crop requirement 100 times (at max)
                                 check_count = 100
@@ -433,13 +441,19 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
                                         self.crop_size[0],
                                         self.crop_size[1],
                                     )
+                                    '''
                                     crop_array = np.array(
                                         transforms.functional.to_pil_image(
                                             (torch.squeeze(preproc_image))
                                         )
                                     )
+                                    '''
+                                    crop_array = (np.moveaxis(preproc_image.squeeze().numpy(),0,-1)*256).astype('uint8')
                             self.mod_resol.append(image.size)
-                            save_image(preproc_image, filename_cropped)
+                            # save_image(preproc_image, filename_cropped)
+                            # preproc_image_sk = (np.moveaxis(preproc_image.squeeze().numpy(),0,-1)*256).astype('uint8')
+                            # preproc_image_sk = np.moveaxis(preproc_image_sk,0,-1)
+                            skimage.io.imsave(filename_cropped,crop_array)
                         """
                         else:
                             print(f"{filename_cropped} already exists")
@@ -507,7 +521,7 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
                         + filename_noext
                         + "_crop"
                         + str(cidx + 1)
-                        + ".png"
+                        + ".tif"
                     )
                     # if crop does not exist and also pkl of crop permutation, close
                     if not os.path.exists(filename_cropped) and overwrite is False:
@@ -528,9 +542,11 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
                             + " for "
                             + filename_noext
                         )
-                        image = Image.open(filename)
-                        if image.mode != "RGB":
-                            image = image.convert("RGB")
+                        import pdb; pdb.set_trace()
+                        image = skimage.io.imread(filename)
+                        # image = Image.open(filename)
+                        #if image.mode != "RGB":
+                        #    image = image.convert("RGB")
                         image_tensor = transforms.functional.to_tensor(
                             image
                         ).unsqueeze_(0)
@@ -571,7 +587,11 @@ class Dataset(torch.utils.data.Dataset):  # type: ignore
                         )
                         print("tensor after crop")
                         print(preproc_image.shape)
-                        save_image(preproc_image, filename_cropped)
+                        # save_image(preproc_image, filename_cropped)
+                        preproc_image_sk = (preproc_image.squeeze().numpy()*256).astype('uint8')
+                        #preproc_image_sk = np.moveaxis(preproc_image_sk,0,-1)
+                        import pdb; pdb.set_trace()
+                        skimage.io.imsave(filename_cropped,preproc_image_sk)
                         self.mod_resol.append(image.size)
                     """
                     else:

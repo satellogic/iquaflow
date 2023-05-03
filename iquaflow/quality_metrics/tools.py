@@ -10,10 +10,16 @@ from torchvision import transforms
 
 
 def create_network(
-    network: str = "resnet18", pretrained: bool = True, out_features: Any = None
+    network: str = "resnet18", pretrained: bool = True, out_features: Any = None, in_features: Any = None
 ) -> torch.nn.Module:
     torch_func = getattr(models, network)
     net: torch.nn.Module = torch_func(pretrained=pretrained)
+    if in_features is not None:
+        if hasattr(net, "conv1"):
+            net.conv1 = torch.nn.Conv2d(in_features, net.conv1.out_channels, kernel_size=net.conv1.kernel_size, stride=net.conv1.stride, padding=net.conv1.padding)
+        elif hasattr(net, "features"):
+            if hasattr(net.features, "0"):
+                net.features[0] = torch.nn.Conv2d(in_features, net.features[0].out_channels, kernel_size=net.features[0].kernel_size, stride=net.features[0].stride, padding=net.features[0].padding)
     if out_features is not None:
         if hasattr(net, "fc"):  # ResNet18, ResNet50, etc.
             net.fc = torch.nn.Linear(

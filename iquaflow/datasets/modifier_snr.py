@@ -53,7 +53,7 @@ class DSModifier_snr(DSModifier_dir):
         proc_img = self.NoisyImageModifier.increase_image_gaussian_noise(
             img, self.init_SNR, desired_snr=par
         )
-        rec_img = np.asarray(transforms.functional.to_pil_image(proc_img))
+        rec_img = np.asarray(proc_img) # np.asarray(transforms.functional.to_pil_image(proc_img))
         return rec_img
 
 

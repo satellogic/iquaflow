@@ -36,5 +36,5 @@ class DSModifier_sharpness(DSModifier_dir):
         proc_img = transforms.functional.adjust_sharpness(
             img=image_tensor, sharpness_factor=par
         )
-        rec_img = np.asarray(transforms.functional.to_pil_image(proc_img))
+        rec_img = proc_img.numpy() # np.asarray(transforms.functional.to_pil_image(proc_img))
         return rec_img

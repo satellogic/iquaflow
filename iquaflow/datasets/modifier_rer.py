@@ -56,7 +56,7 @@ class DSModifier_rer(DSModifier_dir):
         proc_img = self.BlurImageModifier.apply_blur_to_image(
             img, self.init_RER, desired_RER=par
         )
-        rec_img = np.asarray(transforms.functional.to_pil_image(proc_img))
+        rec_img = np.asarray(proc_img) # np.asarray(transforms.functional.to_pil_image(proc_img))
         return rec_img
 
 

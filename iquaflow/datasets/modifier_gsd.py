@@ -64,5 +64,5 @@ class DSModifier_gsd(DSModifier_dir):
         )
         proc_img = tRESOL(image_tensor)  # downscale or upscale
         proc_img = tRESOL_orig(proc_img)  # go back to original size
-        rec_img = np.asarray(transforms.functional.to_pil_image(proc_img))
+        rec_img = proc_img.numpy() # np.asarray(transforms.functional.to_pil_image(proc_img))
         return rec_img

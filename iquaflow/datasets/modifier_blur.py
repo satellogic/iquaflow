@@ -39,5 +39,5 @@ class DSModifier_blur(DSModifier_dir):
             ]
         )
         proc_img = tGAUSSIAN(image_tensor)
-        rec_img = np.asarray(transforms.functional.to_pil_image(proc_img))
+        rec_img = proc_img.numpy() # np.asarray(transforms.functional.to_pil_image(proc_img))
         return rec_img
