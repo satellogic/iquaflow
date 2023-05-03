@@ -35,7 +35,7 @@ class SNRBase:
     def apply_one_channel(self, image: np.array) -> Tuple[float, float]:
         pass
 
-    def apply(self, image: np.array) -> np.float:
+    def apply(self, image: np.array) -> float:
         """
         Iterates through the different channels of the image, calls the function
         that calculates the SNR for that channel. In the end it takes the mean
@@ -248,7 +248,7 @@ class SNRHomogeneousBlocks(SNRBase):
         self.patch_size = patch_size  # type: ignore
         self.stride = self.patch_size if not stride else stride
 
-    def get_snr_value(self, img: np.array) -> Tuple[np.float, np.float]:
+    def get_snr_value(self, img: np.array) -> Tuple[float, float]:
 
         # img_width, img_height = img.shape
         # if img.dtype == np.uint8:
@@ -313,7 +313,7 @@ def snr_function_from_fn(
 ) -> Tuple[Any, Any]:
     """
     Generic function to apply either SNR algorithm for an image.
-    
+
     Args:
         image_path: the path to your image
         ext: the extension of the image

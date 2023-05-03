@@ -70,41 +70,41 @@ class SharpnessMeasure:
     ):
 
         """
-        The implementation needs several parameters, where the best value can be quite different depending on the source
-        of the image.
-        Args:
-window_size: If the image is large, the edge detector works better if we cut it to smaller windows. You
-        need to define the window size here. If None is set, the whole image is passed to the edge detector at once.
-        Args:
-stride: The stride of the sliding windows. By default it is the same as the window size.
-        Args:
-edge_length: The length of the edges we want to evaluate.
-        Args:
-edge_distance: The minimum distance between to edges.
-        Args:
-contrast_params: A dictionary of dictionaries containing the alpha, beta, and gamma parameters to
-        evaluate if an edge has sufficient contrast. The keys need to contain the channel number and the values are
-        dictionaries containing the parameters.
-        Args:
-pixels_sampled: The number of pixels to be sampled on either sides of the edges. Minimum is 5. Default
-        intents to create patches with a square shape
-        Args:
-r2_threshold: When fitting the constructed ESF with a theoretical curve, the R2 value of the fit has to
-        be above this threshold to be evaluated.
-        Args:
-snr_threshold: The minimum value of esge SNR for an edge to be evaluated
-        Args:
-get_rer: If True, the RER value is calculated.
-        Args:
-get_fwhm: If True, the FWHM value is calculated.
-        Args:
-get_mtf: If True, the MTF is calculated, and its value at the Nyquist frequency and at the half Nyquist
-        frequency is returned.
-        Args:
-debug: If True, some debugging messages and plots are shown.
-        Args:
-calculate_mean: If the image has multiple channels, all metrics are calculated independently for each
-        channel. Setting this parameter as True, the mean values across channels is returned for each metric as well.
+                The implementation needs several parameters, where the best value can be quite different depending on the source
+                of the image.
+                Args:
+        window_size: If the image is large, the edge detector works better if we cut it to smaller windows. You
+                need to define the window size here. If None is set, the whole image is passed to the edge detector at once.
+                Args:
+        stride: The stride of the sliding windows. By default it is the same as the window size.
+                Args:
+        edge_length: The length of the edges we want to evaluate.
+                Args:
+        edge_distance: The minimum distance between to edges.
+                Args:
+        contrast_params: A dictionary of dictionaries containing the alpha, beta, and gamma parameters to
+                evaluate if an edge has sufficient contrast. The keys need to contain the channel number and the values are
+                dictionaries containing the parameters.
+                Args:
+        pixels_sampled: The number of pixels to be sampled on either sides of the edges. Minimum is 5. Default
+                intents to create patches with a square shape
+                Args:
+        r2_threshold: When fitting the constructed ESF with a theoretical curve, the R2 value of the fit has to
+                be above this threshold to be evaluated.
+                Args:
+        snr_threshold: The minimum value of esge SNR for an edge to be evaluated
+                Args:
+        get_rer: If True, the RER value is calculated.
+                Args:
+        get_fwhm: If True, the FWHM value is calculated.
+                Args:
+        get_mtf: If True, the MTF is calculated, and its value at the Nyquist frequency and at the half Nyquist
+                frequency is returned.
+                Args:
+        debug: If True, some debugging messages and plots are shown.
+                Args:
+        calculate_mean: If the image has multiple channels, all metrics are calculated independently for each
+                channel. Setting this parameter as True, the mean values across channels is returned for each metric as well.
 
         """
 
@@ -147,7 +147,7 @@ calculate_mean: If the image has multiple channels, all metrics are calculated i
 
         Args:
             image
-        
+
         Return:
             Also an image
         """
@@ -229,7 +229,7 @@ calculate_mean: If the image has multiple channels, all metrics are calculated i
         Args:
             image: In form of array
             patch_params: tuple
-        
+
         Returns:
             //todo
         """
@@ -373,10 +373,10 @@ calculate_mean: If the image has multiple channels, all metrics are calculated i
         """
         Find suitable line in the image.
         Uses sliding windows to go through the images, and in each window calls the edge_detector function
-        
+
         Args:
             image: array image, only one channel
-        
+
         Returns:
             an array containing the detected lines
         """
@@ -456,10 +456,10 @@ calculate_mean: If the image has multiple channels, all metrics are calculated i
         """
         Given the list of lines found by the edge detectors, it checks the lengths of the lines, and cuts them up to
         segments with a length of the self.edge_length.
-        
+
         Args:
             lines: list of lines
-        
+
         Return:
             //todo
         """
@@ -492,10 +492,10 @@ calculate_mean: If the image has multiple channels, all metrics are calculated i
             vertical (within +-15 degrees from vertical),
             horizontal (within +-15 degrees from horizontal),
             other.
-        
+
         Args:
             lines: list of lines
-        
+
         Returns:
             tuple of 3 list of lines, each with [x0,x1,y0,y1,theta]
         """
@@ -529,14 +529,14 @@ calculate_mean: If the image has multiple channels, all metrics are calculated i
         """
         Takes the line lists, for each line cuts a patch around the line. Then it checks if the patch complies with the
         contrast conditions defined by the parameters. If it complies, it adds the patch to the patch list.
-        
+
         Args:
             image: image numpy array
             vertical: vertical line list
             horizontal: horizontal line list
             other: other line list
             params: contrast condition parameters
-        
+
         Returns:
             a Tuple with the patch lists in each directions, and a list of the good lines
         """
@@ -704,7 +704,7 @@ calculate_mean: If the image has multiple channels, all metrics are calculated i
 
         Args:
             patch:
-        
+
         Returns:
             //todo
         """
@@ -722,7 +722,7 @@ calculate_mean: If the image has multiple channels, all metrics are calculated i
 
         Args:
             patch:
-        
+
         Returns:
             //todo
         """
@@ -745,11 +745,11 @@ calculate_mean: If the image has multiple channels, all metrics are calculated i
     def compute_esf(self, patch: np.array, edge_coeffs: Any) -> Any:
         """
         Constructs the ESF, the normalized ESF, and the LSF, checks their quality, and fits the theoretical functions.
-        
+
         Args:
             patch:
             edge_coeffs:
-        
+
         Returns:
             //todo
         """
@@ -897,7 +897,7 @@ calculate_mean: If the image has multiple channels, all metrics are calculated i
         Args:
             esf:
             x:
-        
+
         Returns:
             //todo
         """
@@ -935,7 +935,7 @@ calculate_mean: If the image has multiple channels, all metrics are calculated i
         """
         Evaluate the quality of the ESF by calculating the edge SNR and checking if it is above the threshold, and
         by calculating the R2 value of the curve fitting, and also checking if it is above the threshold value.
-        
+
         Args:
             lsf_popt:
             esf_norm_popt:
@@ -944,7 +944,7 @@ calculate_mean: If the image has multiple channels, all metrics are calculated i
             v_min:
             v_max:
             x:
-        
+
         Returns:
             //todo
         """
@@ -992,10 +992,10 @@ calculate_mean: If the image has multiple channels, all metrics are calculated i
     def calculate_rer(self, edge_list: List[np.array]) -> np.array:
         """
         Given the list of edges, calculates the RER value for each edge.
-        
+
         Args:
             edge_list:
-        
+
         Returns:
             //todo
         """
@@ -1017,7 +1017,7 @@ calculate_mean: If the image has multiple channels, all metrics are calculated i
 
         Args:
             edge_list:
-        
+
         Returns:
             //todo
         """
@@ -1045,7 +1045,7 @@ calculate_mean: If the image has multiple channels, all metrics are calculated i
 
         Args:
             edge_list:
-        
+
         Returns:
             //todo
         """
@@ -1076,7 +1076,7 @@ calculate_mean: If the image has multiple channels, all metrics are calculated i
         Calculates the average MTF curve of the image.
         It uses a saved list of LSFs. Calculates the MTF curve for each LSF separately, then the mean and the
         standard deviation of the curves.
-        
+
         Returns:
             //todo
         """
@@ -1194,19 +1194,19 @@ class SharpnessMetric(Metric):
         **kwargs: Any,
     ) -> None:
         """
-        The metric to measure sharpness within an Iquaflow experiment.
-        Args:
-experiment_info:
-        Args:
-ext:
-        Args:
-metrics:
-        Args:
-parallel:
-        Args:
-njobs:
-        Args:
-kwargs:
+                The metric to measure sharpness within an Iquaflow experiment.
+                Args:
+        experiment_info:
+                Args:
+        ext:
+                Args:
+        metrics:
+                Args:
+        parallel:
+                Args:
+        njobs:
+                Args:
+        kwargs:
         """
 
         super().__init__()  # type: ignore

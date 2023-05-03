@@ -32,7 +32,7 @@ class DSModifier_gsd(DSModifier_dir):
         self.params.update({"modifier": "{}".format(self._get_name())})
 
     def _mod_img(self, img: np.array) -> np.array:
-        resize_scale = self.params["scale"]
+        resize_scale = 1.0 / self.params["scale"]
         interpolation = int(
             self.params["interpolation"]
         )  # type of resize interpolation
@@ -41,6 +41,7 @@ class DSModifier_gsd(DSModifier_dir):
             int(image_tensor.shape[1] * resize_scale),
             int(image_tensor.shape[2] * resize_scale),
         )
+        orig_size = (image_tensor.shape[1], image_tensor.shape[2])
         tRESOL = transforms.Compose(
             [
                 transforms.Resize(
@@ -51,6 +52,17 @@ class DSModifier_gsd(DSModifier_dir):
                 )
             ]
         )
-        proc_img = tRESOL(image_tensor)
+        tRESOL_orig = transforms.Compose(
+            [
+                transforms.Resize(
+                    size=orig_size,
+                    interpolation=transforms.functional._interpolation_modes_from_int(
+                        interpolation
+                    ),
+                )
+            ]
+        )
+        proc_img = tRESOL(image_tensor)  # downscale or upscale
+        proc_img = tRESOL_orig(proc_img)  # go back to original size
         rec_img = np.asarray(transforms.functional.to_pil_image(proc_img))
         return rec_img
