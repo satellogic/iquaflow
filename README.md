@@ -20,6 +20,12 @@ Usage examples and a detailed description of our framwework can be found within 
 
 [Airplane detection use case](https://github.com/satellogic/iquaflow-airport-use-case)
 
+[(QMRNet) Metric Regression on EO datasets use case](https://github.com/dberga/iquaflow-qmr-eo)
+
+[(QMRNet) Metric Regression for single image super-resolution use case](https://github.com/dberga/iquaflow-qmr-sisr)
+
+[(QMRNet) Metric Regression for super-resolution optimization use case](https://github.com/dberga/iquaflow-qmr-loss)
+
 ## Installation
 
 You can install iquaflow using pip:
