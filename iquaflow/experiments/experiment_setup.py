@@ -140,7 +140,6 @@ class ExperimentSetup:
             to_bucket_if_needed_lst = [ds_wrapper_modified_train.data_path]
 
             if self.ref_dsw_test is not None:
-
                 ds_wrapper_modified_test = ds_modifier.modify_ds_wrapper(
                     ds_wrapper=self.ref_dsw_test
                 )
@@ -148,7 +147,6 @@ class ExperimentSetup:
                 to_bucket_if_needed_lst.append(ds_wrapper_modified_test.data_path)
 
             if self.ref_dsw_val is not None:
-
                 ds_wrapper_modified_val = ds_modifier.modify_ds_wrapper(
                     ds_wrapper=self.ref_dsw_val
                 )
@@ -172,7 +170,6 @@ class ExperimentSetup:
                     curr_dict.update({"testds": ds_wrapper_modified_test.data_path})
 
                 for t in range(self.repetitions):
-
                     self.task_instance.train_val(
                         experiment_name=self.experiment_name,
                         run_name=ds_wrapper_modified_train.ds_name,

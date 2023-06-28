@@ -47,7 +47,6 @@ def remove_mlruns() -> None:
 
 
 def check_metric_result(metric: QualityMetrics, metric_name: str) -> None:
-
     # prepare_fresh_ds_modifier
     remove_mlruns()
     ds_wrapper = DSWrapper(data_path=data_path)

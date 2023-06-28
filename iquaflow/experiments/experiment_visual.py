@@ -79,7 +79,6 @@ class ExperimentVisual:
         is_agg = df.columns.nlevels > 1
 
         if plot_mean_std:
-
             # Plot mean_std
             if not is_agg:
                 raise ValueError(
@@ -97,7 +96,6 @@ class ExperimentVisual:
             _ = handle.set_ylabel(yvar)
 
         else:
-
             # Don't plot mean_std but other stuff
 
             if plot_kind == "lineplot":

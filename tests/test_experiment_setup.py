@@ -110,13 +110,11 @@ class TestExperimentSetup:
         remove_mlruns()
 
     def test_run_with_validation_ds(self):
-
         remove_mlruns()
         ds_modifiers_list = [DSModifier()]
         task = PythonScriptTaskExecution(model_script_path=python_ml_script_path)
 
         with tempfile.TemporaryDirectory() as out_path:
-
             vali_data_path = os.path.join(out_path, "valids")
             shutil.copytree(data_path, vali_data_path)
 
@@ -142,12 +140,10 @@ class TestExperimentSetup:
 
 class TestMLFlowURI:
     def test_mlflow_tracking_registry_uri(self):
-
         default_tracking_uri = mlflow.get_tracking_uri()
         default_registry_uri = mlflow.get_registry_uri()
 
         with tempfile.TemporaryDirectory() as out_path:
-
             python_ml_script_path = os.path.join(out_path, "train.py")
             open(python_ml_script_path, "a").close()  # create empty file
             open(

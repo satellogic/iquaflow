@@ -42,18 +42,15 @@ def upload_objects(
     s3_resource = boto3.resource("s3", region_name="eu-west-1")
 
     try:
-
         my_bucket = s3_resource.Bucket(bucket_name)
 
         for pth, subdirs, files in os.walk(root_path):
-
             directory_name = pth.replace(root_path, "")
 
             if directory_name.startswith(os.sep):
                 directory_name = directory_name[1:]
 
             if len(files) > 0:
-
                 src = os.path.join(pth, files[0])
                 dst = os.path.join(root_pth_bucket, directory_name, files[0])
                 print("Uploading data to S3... i.e.")
@@ -69,7 +66,6 @@ def upload_objects(
                 )
 
     except Exception as err:
-
         print("Error:", err)
 
 

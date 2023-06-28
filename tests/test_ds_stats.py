@@ -301,12 +301,10 @@ class TestDsStats:
             assert os.path.exists(htmlfn), "Did not manage to export the html filename"
 
     def test_rasterized_stats(self):
-
         current_path = os.path.dirname(os.path.realpath(__file__))
         orig_path = os.path.join(current_path, "test_datasets", "ds_geo_dataset")
 
         with tempfile.TemporaryDirectory() as tmp_dir:
-
             output_path = os.path.join(tmp_dir, "output_path")
             data_path = os.path.join(tmp_dir, "data_path")
             annotfn = os.path.join(data_path, "annots.geojson")

@@ -69,7 +69,6 @@ def sample_df(option: str) -> pd.DataFrame:
 
 class TestExperimentVisual:
     def test_experiment_visual_class(self):
-
         # Making df1 for testing...
         df1 = sample_df("agg1")
 
@@ -102,7 +101,6 @@ class TestExperimentVisual:
             ), "Failed to save scatter1.png"
 
     def test_experiment_visual_class_single_var(self):
-
         # Second test with a different dataframe
         df1 = sample_df("agg1")
         df1 = ExperimentVisual(df1)._adapt_agg(
@@ -110,7 +108,6 @@ class TestExperimentVisual:
         )  # adapt the inner df1 with default var
 
         with tempfile.TemporaryDirectory() as out_path:
-
             ev = ExperimentVisual(df1, os.path.join(out_path, "lineplot2.png"))
             assert ev.df.equals(
                 df1
@@ -141,12 +138,10 @@ class TestExperimentVisual:
             assert not ev.out_fullfn, "out_fullfn should be None but it is not"
 
     def test_experiment_visual_class_std_mean(self):
-
         # Making df1 for testing...
         df1 = sample_df("agg2")
 
         with tempfile.TemporaryDirectory() as out_path:
-
             ev = ExperimentVisual(df1, os.path.join(out_path, "lineplot_meanstd1.png"))
             assert ev.df.equals(
                 df1
@@ -166,12 +161,10 @@ class TestExperimentVisual:
             ), "Failed to save bars1_meanstd.png"
 
     def test_experiment_visual_class_precision_recall(self):
-
         # Making df1 for testing ROC curve
         df1 = sample_df("ROC")
 
         with tempfile.TemporaryDirectory() as out_path:
-
             ev = ExperimentVisual(df1, os.path.join(out_path, "ROC.png"))
             assert ev.df.equals(
                 df1

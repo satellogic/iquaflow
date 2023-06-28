@@ -27,12 +27,10 @@ class TestSanityCheck:
             assert dss.data_path == ds_path
 
     def test_init(self):
-
         current_path = os.path.dirname(os.path.realpath(__file__))
         data_path = os.path.join(current_path, "test_datasets", "ds_coco_dataset")
 
         with tempfile.TemporaryDirectory() as output_path:
-
             assert os.path.exists(data_path), data_path + " data_path does not exist"
             assert os.path.exists(output_path), "output_path does not exist"
             assert [el for el in glob(os.path.join(data_path, "*.*json"))][
@@ -56,12 +54,10 @@ class TestSanityCheck:
             ), "cannot retrieve list of images within dataset"
 
     def test_geojson(self):
-
         current_path = os.path.dirname(os.path.realpath(__file__))
         orig_path = os.path.join(current_path, "test_datasets", "ds_geo_dataset")
 
         with tempfile.TemporaryDirectory() as tmp_dir:
-
             data_path = os.path.join(tmp_dir, "data_path")
             output_path = os.path.join(tmp_dir, "output_path")
 
@@ -186,7 +182,6 @@ class TestSanityCheck:
             # TODO test image corruption sanitization HERE. will be done in 'autofix'
 
     def test_check_imgs_dup(self):
-
         current_path = os.path.dirname(os.path.realpath(__file__))
         data_path = os.path.join(current_path, "test_datasets", "ds_coco_dataset")
 
@@ -221,7 +216,6 @@ class TestSanityCheck:
             assert problems == [], "Clean duplicated images failed"
 
     def test_err_image_type(self):
-
         current_path = os.path.dirname(os.path.realpath(__file__))
         data_path = os.path.join(current_path, "test_datasets", "ds_coco_dataset")
 
@@ -242,7 +236,6 @@ class TestSanityCheck:
             ), "SanityCheck.err_image_type() failed with invalid file extension"
 
     def test_check_coco_annotation(self):
-
         current_path = os.path.dirname(os.path.realpath(__file__))
         data_path = os.path.join(current_path, "test_datasets", "ds_coco_dataset")
 
@@ -310,12 +303,10 @@ class TestSanityCheck:
             ], "SanityCheck.fix_coco_image_size() failed."
 
     def test_rasterize(self):
-
         current_path = os.path.dirname(os.path.realpath(__file__))
         orig_path = os.path.join(current_path, "test_datasets", "ds_geo_dataset")
 
         with tempfile.TemporaryDirectory() as tmp_dir:
-
             data_path = os.path.join(tmp_dir, "data_path")
             mask_path = os.path.join(data_path, "images_mask")
             annotfn = os.path.join(data_path, "annots.geojson")
