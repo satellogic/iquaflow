@@ -923,7 +923,6 @@ class MTF:
         edges_sum: Any,
         super_resolution_factor: Any,
     ) -> Any:
-
         # Align the edge to the reference with subpixel precision.
         dx2 = self.align_edges_subpix(
             edges1_corrected, edges2_corrected, angle2, USE_IMATEST_TRICK, figure_label
@@ -1011,7 +1010,6 @@ class RERMetric(Metric):
         return rer
 
     def _parallel_rer(self, pred_fn: str) -> Tuple[Optional[int], Any]:
-
         pred = cv2.imread(pred_fn)
 
         if len(pred.shape) == 3:

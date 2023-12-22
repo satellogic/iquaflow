@@ -101,7 +101,6 @@ class TestSharpness:
     """
 
     def test_sharpness_blurred_image(self):
-
         expected_results_in_coco_ds = {
             "RER_X": 0.55,
             "RER_Y": 0.55,
@@ -211,7 +210,6 @@ class TestSNR:
     """
 
     def test_snr_metric_hb_option(self):
-
         expected_results_in_coco_ds = {
             "snr_mean": 35.55032353607093,
             "snr_median": 28.91166092794036,
@@ -219,7 +217,6 @@ class TestSNR:
         }
 
         with tempfile.TemporaryDirectory() as tmp_dir:
-
             new_data_path = os.path.join(tmp_dir, "ds")
             shutil.copytree(data_path, new_data_path)
 
@@ -262,7 +259,6 @@ class TestSNR:
                 ), f"Unexpected result for SNR {key}"
 
     def test_snr_metric_ha_option(self):
-
         expected_results_in_coco_ds = {
             "snr_median": 32.34672691093317,
             "snr_mean": 32.24198884869302,
@@ -270,7 +266,6 @@ class TestSNR:
         }
 
         with tempfile.TemporaryDirectory() as tmp_dir:
-
             new_data_path = os.path.join(tmp_dir, "ds")
             shutil.copytree(data_path, new_data_path)
 

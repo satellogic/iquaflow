@@ -68,7 +68,6 @@ class SharpnessMeasure:
         debug: bool = False,
         calculate_mean: bool = False,
     ):
-
         """
                 The implementation needs several parameters, where the best value can be quite different depending on the source
                 of the image.
@@ -254,7 +253,6 @@ class SharpnessMeasure:
                 ["X", "Y", "other"],
             )
         ):
-
             # Create edge_list
             edge_list = edge_dict[kind]
             line_list = line_dict[kind]
@@ -640,7 +638,6 @@ class SharpnessMeasure:
                     and np.std(DNd) / np.std(patch) < beta
                     and np.quantile(DNb, 0.1) / np.quantile(DNd, 0.9) > gamma
                 ):
-
                     # set nearby pixel values to nan in order to sample edges too close to each other
                     d = self.edge_distance // 2
                     masked_image[x1 - d : x2 + d, y1 - d : y2 + d] = np.nan
@@ -690,7 +687,7 @@ class SharpnessMeasure:
         edge_list = []
         final_line_list = []
 
-        for (patch, line) in zip(patch_list, line_list):
+        for patch, line in zip(patch_list, line_list):
             _esf = self._get_edge(patch, line)
             if _esf is not None:
                 edge_list.append(_esf[0])

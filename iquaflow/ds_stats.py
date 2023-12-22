@@ -358,14 +358,12 @@ class DsStats:
         # Foreach image and foreach annot within image
         # add the annot area relative to the image area by class/category/kind
         for im in gt["images"]:
-
             image_id = im["id"]
             d[image_id] = {-999: 0}
             imarea = im["height"] * im["width"]
             an_lst = [an for an in gt["annotations"] if an["image_id"] == image_id]
 
             for annot in an_lst:
-
                 if "segmentation" in annot:
                     kind = annot["category_id"]
                     seg = annot["segmentation"]
@@ -382,9 +380,7 @@ class DsStats:
         d_avg = {}
 
         for image_id in d:
-
             for kind in d[image_id]:
-
                 if kind not in d_avg:
                     d_avg[kind] = 0
                 if kind in d[image_id]:

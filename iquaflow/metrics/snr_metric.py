@@ -133,7 +133,6 @@ class SNRHomogeneousArea(SNRBase):
         lbp_threshold: float = 0.6,
         **kwargs: Any,
     ) -> None:
-
         super().__init__(**kwargs)
         self.patch_size = patch_size  # type: ignore
         self.stride = stride or self.patch_size
@@ -218,7 +217,6 @@ class SNRHomogeneousArea(SNRBase):
         ), np.nanstd(self.snr[np.argwhere(m_ == self.img_median)].flatten())
 
     def apply_one_channel(self, image: np.array) -> Any:
-
         self.find_patches_lbp(
             image, self.patch_size, self.stride, self.radius, self.lbp_threshold  # type: ignore
         )
@@ -249,7 +247,6 @@ class SNRHomogeneousBlocks(SNRBase):
         self.stride = self.patch_size if not stride else stride
 
     def get_snr_value(self, img: np.array) -> Tuple[float, float]:
-
         # img_width, img_height = img.shape
         # if img.dtype == np.uint8:
         #     self.snrs: dict[int,list] = {i: [] for i in range(256)}
@@ -357,7 +354,6 @@ class SNRMetric(Metric):
     def __init__(
         self, experiment_info: Any, ext: str = "tif", method: str = "HB", **kwargs: Any
     ) -> None:
-
         self.experiment_info = experiment_info
         self.ext = ext
         self.metric_names = ["snr_median", "snr_mean", "snr_std"]

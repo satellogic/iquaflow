@@ -109,7 +109,6 @@ class SanityCheck:
 
         elif self.isgeo:
             for json_fn in self.annotfns:
-
                 gt = gpd.read_file(json_fn)
                 gt_image = [
                     {"file_name": el, "id": enu}
@@ -127,7 +126,6 @@ class SanityCheck:
                     for err in im_dup
                 ]
                 for sbi, im in enumerate(gt_image):
-
                     if self.err_image_type(im):
                         problems.append(
                             {
@@ -192,7 +190,6 @@ class SanityCheck:
                         json.dump(gt, outfile)
         elif self.isgeo:
             for json_fn in self.annotfns:
-
                 if rasterize:
                     _ = Rasterize(json_fn)
 
@@ -490,14 +487,12 @@ class Rasterize:
         self.main_df = gpd.read_file(self.geojson_fn)
 
         for req in REQUIRED_FIELDS:
-
             assert (
                 req in self.main_df.columns
             ), f"Err: Required IQF convention field {req} not present in geodataframe."
 
         # for each image
         for ref_geotiff in self.main_df["image_filename"]:
-
             (
                 img,
                 list_of_geometries,
@@ -508,7 +503,6 @@ class Rasterize:
             out_transform = None
 
             for class_id in set(list_of_class_ids):
-
                 short_list_of_geometries = [
                     g
                     for g, c in zip(list_of_geometries, list_of_class_ids)
@@ -516,7 +510,6 @@ class Rasterize:
                 ]
 
                 with rio.open(output_filename) as src:
-
                     ones_where_poly, out_transform = mask(
                         src,
                         short_list_of_geometries,
@@ -546,7 +539,6 @@ class Rasterize:
         """
 
         with rio.open(ref_geotiff) as src:
-
             Z = src.read(1)
             Z[:, :] = 255
             Z = Z.astype(rio.uint8)
@@ -562,7 +554,6 @@ class Rasterize:
             crs=src.crs,
             transform=src.transform,
         ) as dst:
-
             dst.write(Z, 1)
 
         return Z
@@ -611,7 +602,6 @@ class Rasterize:
         """
 
         if out_transform is not None:
-
             out_meta.update(
                 {
                     "driver": "GTiff",
@@ -623,7 +613,6 @@ class Rasterize:
             )
 
         else:
-
             out_meta.update(
                 {
                     "driver": "GTiff",
@@ -634,5 +623,4 @@ class Rasterize:
             )
 
         with rio.open(output_filename, "w", **out_meta) as dest:
-
             dest.write(img, 1)

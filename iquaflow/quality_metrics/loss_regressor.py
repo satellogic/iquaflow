@@ -64,7 +64,9 @@ def argparse_regressor_loss(
 
 def init_regressor_loss(  # crop_size (defining network's input size) is mandatory here
     opt: Any,
-) -> Any:  # opt must be the output of argparse after parse_args(), containing "regressor_loss", "regressor_criterion" and "cuda"
+) -> (
+    Any
+):  # opt must be the output of argparse after parse_args(), containing "regressor_loss", "regressor_criterion" and "cuda"
     if opt.regressor_loss == "rer":
         quality_metric = RERMetrics(input_size=opt.crop_size)
     elif opt.regressor_loss == "snr":

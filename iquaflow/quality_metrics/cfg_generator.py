@@ -85,7 +85,6 @@ def args2powersetdict(
     args_unique: List[Any],
     dict_args_cfg_empty: Dict[str, Any],
 ) -> Tuple[Any, Any]:
-
     # get combinations
     dicts_sets = []
     names_sets = []

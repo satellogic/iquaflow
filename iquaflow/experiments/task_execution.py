@@ -215,7 +215,6 @@ class PythonScriptTaskExecution(TaskExecution):
         self.python_script_format = "python {} --trainds {} --outputpath {} {}"
 
     def _exec_subprocess(self, script: str) -> Any:
-
         p = subprocess.Popen(
             script,
             shell=True,
@@ -273,15 +272,12 @@ class SageMakerConfig:
     """
 
     def __init__(self) -> None:
-
         try:
-
             self.sagemaker_session = sagemaker.Session()
             self.bucket = self.sagemaker_session.default_bucket()
             self.role = sagemaker.get_execution_role()
 
         except Exception as e:
-
             print(f"{e}")
             print(
                 "WARNING > You are not in SageMaker environment. You should execute this in the cloud "
@@ -314,7 +310,6 @@ class SageMakerEstimatorFactory:
         self.args_dict = args_dict
 
     def gen_estimator(self, hyperparameters: Dict[str, Any]) -> Any:
-
         self.args_dict["hyperparameters"] = hyperparameters
 
         return self.estimator_instancer(**self.args_dict)
@@ -345,7 +340,6 @@ class SageMakerTaskExecution(TaskExecution):
         push_image_to_ecr: bool = False,
         tmp_dir: Union[str, None] = None,
     ) -> None:
-
         self.exec_locally = exec_locally
 
         TaskExecution.__init__(self, tmp_dir)

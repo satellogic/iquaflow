@@ -18,7 +18,6 @@ modifier_name = "base_modifier"
 
 
 def check_modification(input_path: str, output_images_path: str) -> bool:
-
     original_images = [
         os.path.basename(f) for f in glob.glob(os.path.join(input_path, "*.jpg"))
     ]
