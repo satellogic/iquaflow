@@ -41,6 +41,22 @@ provided that you can install its dependencies. If you find any problem,
 [please open an issue](https://github.com/satellogic/iquaflow/issues/new)
 and we will take care of it.
 
+## Citation 
+
+If you use this library in your research, please consider citing:
+
+```
+@article{Iquaflow,
+  author={Gallés, Pau and Takáts, Katalin and Hernández-Cabronero, Miguel and Berga, David and Pega, Luciano and Riordan-Chen, Laura and Garcia, Clara and Becker, Guillermo and Garriga, Adan and Bukva, Anica and Serra-Sagristà, Joan and Vilaseca, David and Marín, Javier},
+  journal={IEEE Journal of Selected Topics in Applied Earth Observations and Remote Sensing}, 
+  title={A New Framework for Evaluating Image Quality Including Deep Learning Task Performances as a Proxy}, 
+  year={2024},
+  volume={17},
+  number={},
+  pages={3285-3296},
+  doi={10.1109/JSTARS.2023.3342475}}
+```
+
 ## Support
 
 For any questions or suggestions you can use the issues section or reach us at iquaflow@satellogic.com.
